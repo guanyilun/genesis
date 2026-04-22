@@ -80,7 +80,10 @@ def run_gui(ticks: int):
         curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)     # traces
         curses.init_pair(4, curses.COLOR_CYAN, curses.COLOR_BLACK)    # stats
 
-        view_size = min(world.size, 50)
+        # Reserve 4 rows for stats panel at the bottom
+        max_rows, max_cols = stdscr.getmaxyx()
+        stats_rows = 4
+        view_size = min(world.size, 50, max_rows - stats_rows, max_cols)
         paused = False
         speed = 1  # ticks per frame
 
@@ -129,21 +132,33 @@ def run_gui(ticks: int):
             # Stats panel
             s = world.stats()
             stats_y = view_size + 1
-            stdscr.addstr(stats_y, 0,
-                f"tick:{s['tick']} pop:{s['population']} births:{s['total_births']} "
-                f"deaths:{s['total_deaths']} avg_genome:{s['avg_genome_length']:.1f} "
-                f"speed:{speed}x",
-                curses.color_pair(4))
+            try:
+                stdscr.addstr(stats_y, 0,
+                    f"tick:{s['tick']} pop:{s['population']} births:{s['total_births']} "
+                    f"deaths:{s['total_deaths']} avg_genome:{s['avg_genome_length']:.1f} "
+                    f"speed:{speed}x",
+                    curses.color_pair(4))
+            except curses.error:
+                pass
 
             if world.population == 0:
-                stdscr.addstr(stats_y + 1, 0, "EXTINCTION", curses.color_pair(3) | curses.A_BOLD)
+                try:
+                    stdscr.addstr(stats_y + 1, 0, "EXTINCTION", curses.color_pair(3) | curses.A_BOLD)
+                except curses.error:
+                    pass
 
             if paused:
-                stdscr.addstr(stats_y + 1, 0, "PAUSED (space to resume, q to quit)")
+                try:
+                    stdscr.addstr(stats_y + 1, 0, "PAUSED (space to resume, q to quit)")
+                except curses.error:
+                    pass
 
-            stdscr.addstr(stats_y + 2, 0,
-                "controls: space=pause  +/-=speed  q=quit",
-                curses.color_pair(4))
+            try:
+                stdscr.addstr(stats_y + 2, 0,
+                    "controls: space=pause  +/-=speed  q=quit",
+                    curses.color_pair(4))
+            except curses.error:
+                pass
 
             stdscr.refresh()
             time.sleep(0.05)
