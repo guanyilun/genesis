@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>genesis — live</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Menlo, monospace;
+    background: #0d0d10;
+    color: #d4d4d4;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .panel {
+    padding: 12px 14px;
+    overflow-y: auto;
+    background: #15151a;
+    border-right: 1px solid #2a2a33;
+  }
+  .panel.right {
+    border-right: none;
+    border-left: 1px solid #2a2a33;
+    min-width: 260px;
+  }
+  .panel.left { min-width: 240px; }
+  .stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #08080a;
+  }
+  canvas {
+    background: #000;
+    image-rendering: pixelated;
+    border: 1px solid #2a2a33;
+  }
+  h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    margin: 14px 0 6px;
+    font-weight: 600;
+  }
+  h2:first-child { margin-top: 0; }
+  label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    margin: 4px 0;
+    color: #bbb;
+  }
+  label span.val { color: #e0e0e0; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; }
+  input[type=number] {
+    width: 80px;
+    background: #0a0a0d;
+    border: 1px solid #2a2a33;
+    color: #e0e0e0;
+    padding: 3px 6px;
+    border-radius: 2px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  select {
+    width: 100%;
+    background: #0a0a0d;
+    border: 1px solid #2a2a33;
+    color: #e0e0e0;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  button {
+    background: #1f1f28;
+    border: 1px solid #3a3a48;
+    color: #e0e0e0;
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  button:hover { background: #2a2a35; }
+  button.primary { background: #2d5a3d; border-color: #3f7a53; }
+  button.primary:hover { background: #3a6a4a; }
+  .controls { display: flex; gap: 6px; margin: 8px 0; }
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin: 2px 0;
+  }
+  .stat .k { color: #888; }
+  .stat .v { font-variant-numeric: tabular-nums; }
+  .overlays label { cursor: pointer; }
+  .overlays input { margin-right: 6px; }
+  .opcode-bar {
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    margin: 1px 0;
+  }
+  .opcode-bar .name { width: 60px; color: #aaa; }
+  .opcode-bar .bar {
+    flex: 1;
+    height: 8px;
+    background: #1a1a22;
+    border-radius: 1px;
+    overflow: hidden;
+    margin: 0 6px;
+  }
+  .opcode-bar .fill { height: 100%; background: #4a7a5a; }
+  .opcode-bar .pct { width: 38px; text-align: right; color: #ccc; font-variant-numeric: tabular-nums; }
+  header {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #2a2a33;
+    padding-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<aside class="panel left">
+  <header>genesis — live visualization</header>
+
+  <h2>World</h2>
+  <label>variant
+    <select id="variant">
+      <option value="uniform" selected>uniform (moving swarm)</option>
+      <option value="patchy">patchy (stigmergy emerges)</option>
+      <option value="oasis">oasis (strongest cooperation)</option>
+    </select>
+  </label>
+
+  <h2>Parameters</h2>
+  <label>size <input type="number" id="p-size" value="64" min="16" max="256" step="16"></label>
+  <label>population <input type="number" id="p-pop" value="300" min="10" max="2000" step="10"></label>
+  <label>LUCA fraction <span class="val" id="p-luca-val">0.30</span></label>
+  <input type="range" id="p-luca" min="0" max="1" step="0.05" value="0.30">
+  <label>mutation rate <span class="val" id="p-mut-val">0.040</span></label>
+  <input type="range" id="p-mut" min="0" max="0.2" step="0.005" value="0.04">
+  <label>food rate <span class="val" id="p-food-val">0.030</span></label>
+  <input type="range" id="p-food" min="0" max="0.2" step="0.005" value="0.03">
+
+  <div class="controls">
+    <button class="primary" id="btn-reset">reset world</button>
+  </div>
+
+  <h2>Controls</h2>
+  <div class="controls">
+    <button id="btn-play">play</button>
+    <button id="btn-pause">pause</button>
+    <button id="btn-step">step</button>
+  </div>
+  <label>speed <span class="val" id="speed-val">50/s</span></label>
+  <input type="range" id="speed" min="1" max="300" step="1" value="50">
+
+  <h2>Overlays</h2>
+  <div class="overlays">
+    <label><input type="checkbox" id="ov-food" checked>food</label>
+    <label><input type="checkbox" id="ov-traces" checked>traces (stigmergy)</label>
+    <label><input type="checkbox" id="ov-agents" checked>agents</label>
+  </div>
+  <label>color mode
+    <select id="color-mode">
+      <option value="tui" selected>tui (energy)</option>
+      <option value="lineage">lineage (hash)</option>
+    </select>
+  </label>
+</aside>
+
+<main class="stage">
+  <canvas id="world" width="640" height="640"></canvas>
+</main>
+
+<aside class="panel right">
+  <header>live census</header>
+
+  <h2>State</h2>
+  <div class="stat"><span class="k">tick</span><span class="v" id="s-tick">—</span></div>
+  <div class="stat"><span class="k">population</span><span class="v" id="s-pop">—</span></div>
+  <div class="stat"><span class="k">avg genome</span><span class="v" id="s-genome">—</span></div>
+  <div class="stat"><span class="k">food cells</span><span class="v" id="s-food">—</span></div>
+  <div class="stat"><span class="k">trace cells</span><span class="v" id="s-traces">—</span></div>
+
+  <h2>Opcodes (top 10)</h2>
+  <div id="opcodes"></div>
+</aside>
+
+<script src="/app.js"></script>
+</body>
+</html>
