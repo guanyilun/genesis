@@ -47,7 +47,7 @@ class Simulation:
         self.world: World | None = None
         self.variant: str = "uniform"
         self.running: bool = False
-        self.speed: float = 50.0  # ticks per second
+        self.speed: float = 15.0  # ticks per second (was 50.0)
         self.stop_flag = threading.Event()
         self.thread: threading.Thread | None = None
         # Match run.py --gui defaults: uniform food, 64x64 grid, 300 pop.
@@ -114,7 +114,7 @@ class Simulation:
                     pass
                 time.sleep(1.0 / self.speed)
             else:
-                time.sleep(0.05)
+                time.sleep(0.5)  # longer sleep when paused (was 0.05)
 
     # ── State serialization ───────────────────────────────────────
 
@@ -130,13 +130,14 @@ class Simulation:
             for y, row in enumerate(w.grid):
                 for x, cell in enumerate(row):
                     if cell.agent and cell.agent.alive:
+                        agent = cell.agent
                         # Lineage proxy: hash first 8 genome bytes.
                         # Similar clades → similar colors, mutations
                         # jump color slowly. Actual lineage tracking
                         # lives in phylogeny.py; this is purely viz.
-                        head = bytes(cell.agent.genome[:8])
-                        lineage_hue = (sum(head) * 7 + len(cell.agent.genome) * 3) % 360
-                        agents.append([x, y, lineage_hue, cell.agent.energy])
+                        head = bytes(agent.genome[:8])
+                        lineage_hue = (sum(head) * 7 + len(agent.genome) * 3) % 360
+                        agents.append([x, y, lineage_hue, agent.energy])
                     if cell.food > 0:
                         food.append([x, y, cell.food])
                     if cell.trace > 0:
@@ -150,12 +151,13 @@ class Simulation:
             for row in w.grid:
                 for cell in row:
                     if cell.agent and cell.agent.alive:
+                        agent = cell.agent
                         agent_count += 1
-                        for byte in cell.agent.genome:
+                        for byte in agent.genome:
                             op = byte & 0x1F
                             if op < substrate.NUM_OPCODES:
                                 op_counts[op] += 1
-                        total_len += len(cell.agent.genome)
+                        total_len += len(agent.genome)
             avg_genome_len = total_len / agent_count if agent_count else 0
 
             return {
@@ -269,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True})
                 return
             if action == "speed":
-                SIM.set_speed(body.get("speed", 50.0))
+                SIM.set_speed(body.get("speed", 15.0))
                 self._send_json({"ok": True})
                 return
             SIM.control(action)
