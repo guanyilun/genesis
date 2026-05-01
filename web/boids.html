@@ -688,6 +688,82 @@ function drawFlockLinks(ctx) {
   }
 }
 
+// ─── Predator communication arcs ────────────────────────────────────
+// When two predators are within 80px, draw a crackling electric arc
+// Jittery bezier curve with flickering opacity — like tiny lightning
+
+const PRED_COMM_RADIUS = 80;
+
+function drawPredatorArcs(ctx) {
+  if (!CONFIG.predatorComm || predators.length < 2) return;
+
+  const now = performance.now();
+
+  for (let i = 0; i < predators.length; i++) {
+    for (let j = i + 1; j < predators.length; j++) {
+      const a = predators[i], b = predators[j];
+      const dx = b.pos.x - a.pos.x;
+      const dy = b.pos.y - a.pos.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+
+      if (d < PRED_COMM_RADIUS && d > 0) {
+        const alphaA = Math.max(0, 1 - a.age / a.lifetime);
+        const alphaB = Math.max(0, 1 - b.age / b.lifetime);
+        const distAlpha = 1 - d / PRED_COMM_RADIUS;
+        const flickerAlpha = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(now * 0.03 + i * 7 + j * 13));
+        const alpha = distAlpha * flickerAlpha * Math.min(alphaA, alphaB);
+
+        // Jittery bezier: offset control points with random-ish noise
+        const midX = (a.pos.x + b.pos.x) / 2;
+        const midY = (a.pos.y + b.pos.y) / 2;
+        // Perpendicular direction
+        const perpX = -dy / d;
+        const perpY = dx / d;
+        // Jitter amount scales with distance but caps
+        const jitter = (8 + 12 * Math.random()) * (d / PRED_COMM_RADIUS);
+
+        const sx = Math.sin(now * 0.02 + i * 3.7) * jitter;
+        const sy = Math.cos(now * 0.025 + j * 5.1) * jitter;
+        const sx2 = Math.sin(now * 0.022 + i * 2.3 + 1.5) * jitter * 0.7;
+        const sy2 = Math.cos(now * 0.019 + j * 4.7 + 2.1) * jitter * 0.7;
+
+        // Draw 2-3 jittery arcs for thickness
+        for (let k = 0; k < 3; k++) {
+          const jitterMult = 1 - k * 0.3;
+          const lineAlpha = alpha * (1 - k * 0.25);
+
+          ctx.beginPath();
+          ctx.moveTo(a.pos.x, a.pos.y);
+          ctx.bezierCurveTo(
+            midX + perpX * sx * jitterMult + perpY * sy * jitterMult * 0.3,
+            midY + perpY * sy * jitterMult - perpX * sx * jitterMult * 0.3,
+            midX + perpX * sx2 * jitterMult + perpY * sy2 * jitterMult * 0.3,
+            midY + perpY * sy2 * jitterMult - perpX * sx2 * jitterMult * 0.3,
+            b.pos.x, b.pos.y
+          );
+          ctx.strokeStyle = `rgba(255, 100, 180, ${lineAlpha * 0.6})`;
+          ctx.lineWidth = 1.5 - k * 0.3;
+          ctx.stroke();
+        }
+
+        // Central bright core arc (thinner, whiter)
+        ctx.beginPath();
+        ctx.moveTo(a.pos.x, a.pos.y);
+        ctx.bezierCurveTo(
+          midX + perpX * sx * 0.3,
+          midY + perpY * sy * 0.3,
+          midX + perpX * sx2 * 0.3,
+          midY + perpY * sy2 * 0.3,
+          b.pos.x, b.pos.y
+        );
+        ctx.strokeStyle = `rgba(255, 220, 255, ${alpha * 0.4})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
 // ─── Stats computation ──────────────────────────────────────────
 // Cached clusters so detectSubFlocks only runs once per frame
 let cachedClusters = [];
@@ -819,6 +895,9 @@ function loop() {
 
   // Flock-splitting visual — faint links between sub-flocks
   drawFlockLinks(ctx);
+
+  // Predator communication arcs
+  drawPredatorArcs(ctx);
 
   // Murmuration mode visual indicator — subtle wave overlay
   if (CONFIG.murmuration) {
