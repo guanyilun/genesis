@@ -764,6 +764,90 @@ function drawPredatorArcs(ctx) {
   }
 }
 
+// ─── Danger zone — pulsing red circle when 3+ predators cluster ──────
+const DANGER_ZONE_RADIUS = 120; // predators within this range form a cluster
+const DANGER_ZONE_MIN = 3;      // minimum predators to trigger visual
+
+function drawDangerZones(ctx) {
+  if (predators.length < DANGER_ZONE_MIN) return;
+
+  const now = performance.now();
+  const visited = new Set();
+
+  // Find clusters of nearby predators using simple flood-fill
+  for (let i = 0; i < predators.length; i++) {
+    if (visited.has(i)) continue;
+
+    // BFS to find all predators connected within DANGER_ZONE_RADIUS
+    const cluster = [i];
+    const queue = [i];
+    visited.add(i);
+
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      for (let j = 0; j < predators.length; j++) {
+        if (visited.has(j)) continue;
+        const dx = predators[j].pos.x - predators[cur].pos.x;
+        const dy = predators[j].pos.y - predators[cur].pos.y;
+        if (dx * dx + dy * dy < DANGER_ZONE_RADIUS * DANGER_ZONE_RADIUS) {
+          visited.add(j);
+          cluster.push(j);
+          queue.push(j);
+        }
+      }
+    }
+
+    // Only draw danger zone for clusters of 3+
+    if (cluster.length < DANGER_ZONE_MIN) continue;
+
+    // Compute centroid and avg age (for alpha fading)
+    let cx = 0, cy = 0, totalAlpha = 0;
+    for (const idx of cluster) {
+      const p = predators[idx];
+      cx += p.pos.x;
+      cy += p.pos.y;
+      totalAlpha += Math.max(0, 1 - p.age / p.lifetime);
+    }
+    cx /= cluster.length;
+    cy /= cluster.length;
+    const avgAlpha = totalAlpha / cluster.length;
+
+    // Size proportional to predator count, pulsing
+    const pulse = 0.85 + 0.15 * Math.sin(now * 0.005);
+    const baseRadius = 30 + cluster.length * 15;
+    const radius = baseRadius * pulse;
+
+    // Translucent red fill with pulsing opacity
+    const fillAlpha = (0.08 + 0.04 * Math.sin(now * 0.003)) * avgAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 40, 60, ${fillAlpha})`;
+    ctx.fill();
+
+    // Pulsing red border
+    const borderAlpha = (0.3 + 0.2 * Math.sin(now * 0.004)) * avgAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 80, 80, ${borderAlpha})`;
+    ctx.lineWidth = 1.5 + 0.5 * Math.sin(now * 0.006);
+    ctx.stroke();
+
+    // Inner glow ring
+    const innerAlpha = (0.15 + 0.1 * Math.sin(now * 0.007)) * avgAlpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 120, 100, ${innerAlpha})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Tiny label showing count
+    ctx.fillStyle = `rgba(255, 180, 180, ${0.6 * avgAlpha})`;
+    ctx.font = '9px "SF Mono", "Consolas", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`⚠ ×${cluster.length}`, cx, cy + 3);
+  }
+}
+
 // ─── Stats computation ──────────────────────────────────────────
 // Cached clusters so detectSubFlocks only runs once per frame
 let cachedClusters = [];
@@ -891,13 +975,17 @@ function loop() {
   for (const o of obstacles) o.draw(ctx);
   for (const f of foods) f.draw(ctx);
   for (const p of predators) p.draw(ctx);
+
+  // Danger zone — pulsing red circle when 3+ predators cluster
+  drawDangerZones(ctx);
+
+  // Predator communication arcs
+  drawPredatorArcs(ctx);
+
   for (const b of boids) b.draw(ctx);
 
   // Flock-splitting visual — faint links between sub-flocks
   drawFlockLinks(ctx);
-
-  // Predator communication arcs
-  drawPredatorArcs(ctx);
 
   // Murmuration mode visual indicator — subtle wave overlay
   if (CONFIG.murmuration) {
