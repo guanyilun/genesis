@@ -12,6 +12,19 @@
     position: fixed; top: 16px; left: 16px; color: #4488cc88; font-size: 12px;
     pointer-events: none; z-index: 10; line-height: 1.6;
   }
+  #stats {
+    position: fixed; top: 16px; right: 16px; color: #4488cc88; font-size: 11px;
+    pointer-events: none; z-index: 10; line-height: 1.7; text-align: right;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    background: rgba(10, 10, 26, 0.5); border-radius: 6px; padding: 8px 12px;
+    backdrop-filter: blur(4px);
+  }
+  #stats b { color: #66aaff; }
+  #wind-indicator {
+    position: fixed; top: 50%; left: 16px; transform: translateY(-50%);
+    color: #6488cc44; font-size: 10px; pointer-events: none; z-index: 10;
+    writing-mode: vertical-rl; letter-spacing: 2px;
+  }
   #controls {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
     color: #4488cc66; font-size: 11px; text-align: center; pointer-events: none;
@@ -25,7 +38,9 @@
   <div id="count">0 boids</div>
   <div id="mode">observing</div>
 </div>
-<div id="controls">click to add predator · right-click to add food · shift+click to add obstacle · space to pause · +/- to add/remove boids</div>
+<div id="stats"></div>
+<div id="wind-indicator"></div>
+<div id="controls">click: predator · right-click: food · shift+click: obstacle · space: pause · +/-: boids · w: wind · m: murmuration · v: predator comms · d: day/night</div>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // EMERGENT BOIDS — Core Engine
@@ -63,6 +78,16 @@ const CONFIG = {
   currentForce: 0.03,
   trailLength: 6,
   trailAlpha: 0.3,
+  murmuration: false,
+  murmurationAmplitude: 0.08,
+  murmurationFrequency: 0.003,
+  murmurationWaveSpeed: 0.04,
+  windStrength: 0.015,
+  windGustInterval: 300, // frames between gusts
+  windGustDuration: 120, // frames a gust lasts
+  predatorComm: false,  // press V to toggle
+  dayNightCycle: true,   // press D to toggle
+  dayNightSpeed: 0.0003, // cycle frequency (higher = faster)
   paused: false,
 };
 
@@ -187,6 +212,19 @@ class Boid {
         this.acc = vadd(this.acc, avoid);
       }
     }
+
+    // Murmuration mode: sinusoidal vertical oscillation proportional to local density
+    if (CONFIG.murmuration && sepCount > 0) {
+      // Local density = how many neighbors in perception radius (aliCount)
+      const localDensity = Math.min(aliCount / 8, 1); // normalize cap at ~8 neighbors
+      // Wave: phase shifts with x-position so waves propagate spatially
+      const phase = this.pos.x * CONFIG.murmurationFrequency + performance.now() * CONFIG.murmurationWaveSpeed;
+      const oscillation = Math.sin(phase) * CONFIG.murmurationAmplitude * localDensity;
+      this.acc = vadd(this.acc, vec(0, oscillation));
+    }
+
+    // Wind force — affects all boids uniformly
+    this.acc = vadd(this.acc, {x: wind.dirX, y: wind.dirY});
   }
 
   update() {
@@ -382,6 +420,121 @@ class Current {
   }
 }
 
+// ─── Wind system ──────────────────────────────────────────────
+const wind = {
+  // Current wind vector (applied every frame)
+  dirX: 0, dirY: 0,
+  // Gust properties
+  gusting: false,
+  gustTimer: 0,       // frames until next gust
+  gustRemaining: 0,    // frames left in current gust
+  gustDirX: 0, gustDirY: 0,
+  gustStrength: 0,
+  // Ambient drift (slow sinusoidal background wind)
+  driftPhase: Math.random() * Math.PI * 2,
+  // Wind particles for visualization
+  particles: [],
+  maxParticles: 60,
+};
+
+function initWind() {
+  wind.gustTimer = CONFIG.windGustInterval * (0.5 + Math.random()); // stagger first gust
+  wind.dirX = 0;
+  wind.dirY = 0;
+}
+
+function updateWind() {
+  const t = performance.now() * 0.001;
+
+  // ── Ambient drift: slow sinusoidal wind ──
+  wind.driftPhase += 0.002;
+  const ambientX = Math.sin(wind.driftPhase) * CONFIG.windStrength * 0.3;
+  const ambientY = Math.cos(wind.driftPhase * 0.7) * CONFIG.windStrength * 0.2;
+
+  // ── Gust system ──
+  wind.gustTimer--;
+  if (wind.gustTimer <= 0 && !wind.gusting) {
+    // Start a gust!
+    wind.gusting = true;
+    wind.gustRemaining = CONFIG.windGustDuration * (0.6 + Math.random() * 0.8);
+    const angle = Math.random() * Math.PI * 2;
+    wind.gustStrength = CONFIG.windStrength * (3 + Math.random() * 5); // Gusts are 3-8x ambient
+    wind.gustDirX = Math.cos(angle);
+    wind.gustDirY = Math.sin(angle);
+  }
+
+  if (wind.gusting) {
+    wind.gustRemaining--;
+    // Gust ramps up then fades — bell curve shape
+    const progress = 1 - wind.gustRemaining / (CONFIG.windGustDuration * 0.8);
+    const envelope = Math.sin(progress * Math.PI); // peaks in the middle
+    wind.dirX = wind.gustDirX * wind.gustStrength * envelope + ambientX;
+    wind.dirY = wind.gustDirY * wind.gustStrength * envelope + ambientY;
+
+    // Spawn wind particles during gusts
+    if (Math.random() < 0.4 && wind.particles.length < wind.maxParticles) {
+      const startX = Math.random() * W;
+      const startY = Math.random() * H;
+      wind.particles.push({
+        x: startX, y: startY,
+        vx: wind.gustDirX * (2 + Math.random() * 3),
+        vy: wind.gustDirY * (2 + Math.random() * 3),
+        life: 40 + Math.random() * 40,
+        maxLife: 40 + Math.random() * 40,
+        size: 0.5 + Math.random() * 1.5,
+      });
+    }
+
+    if (wind.gustRemaining <= 0) {
+      wind.gusting = false;
+      wind.gustTimer = CONFIG.windGustInterval * (0.5 + Math.random());
+    }
+  } else {
+    wind.dirX = ambientX;
+    wind.dirY = ambientY;
+  }
+
+  // Update wind particles
+  for (let i = wind.particles.length - 1; i >= 0; i--) {
+    const p = wind.particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    // Wrap
+    if (p.x < 0) p.x += W;
+    if (p.x > W) p.x -= W;
+    if (p.y < 0) p.y += H;
+    if (p.y > H) p.y -= H;
+    if (p.life <= 0) wind.particles.splice(i, 1);
+  }
+
+  // Update wind indicator
+  const strength = Math.sqrt(wind.dirX * wind.dirX + wind.dirY * wind.dirY);
+  const indicator = document.getElementById('wind-indicator');
+  if (strength > 0.005) {
+    const angle = Math.atan2(wind.dirY, wind.dirX) * 180 / Math.PI;
+    const arrows = strength > 0.05 ? '≫' : strength > 0.02 ? '›' : '·';
+    const gustLabel = wind.gusting ? ' GUST' : '';
+    indicator.textContent = `WIND ${arrows}${gustLabel}`;
+    indicator.style.transform = `translateY(-50%) rotate(${angle}deg)`;
+    indicator.style.color = wind.gusting ? '#ffaa4444' : '#6488cc44';
+  } else {
+    indicator.textContent = '';
+  }
+}
+
+function drawWindParticles(ctx) {
+  for (const p of wind.particles) {
+    const alpha = (p.life / p.maxLife) * 0.3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = wind.gusting
+      ? `rgba(255, 180, 80, ${alpha})`
+      : `rgba(100, 150, 220, ${alpha})`;
+    ctx.fill();
+  }
+}
+
 // ─── State ────────────────────────────────────────────────────
 let boids = [];
 let predators = [];
@@ -414,6 +567,7 @@ function initBoids(n) {
 
 initBoids(CONFIG.numBoids);
 createDefaultCurrents();
+initWind();
 
 // Create a few default obstacles
 obstacles.push(new Obstacle(W * 0.25, H * 0.35, 35));
@@ -443,31 +597,240 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '-' || e.key === '_') {
     boids.splice(0, Math.min(10, boids.length));
   }
+  if (e.key === 'w' || e.key === 'W') {
+    CONFIG.windStrength = CONFIG.windStrength > 0 ? 0 : 0.015;
+    document.getElementById('mode').textContent = CONFIG.windStrength > 0 ? 'wind on' : 'wind off';
+  }
+  if (e.key === 'm' || e.key === 'M') {
+    CONFIG.murmuration = !CONFIG.murmuration;
+    document.getElementById('mode').textContent = CONFIG.murmuration ? 'murmuration' : 'observing';
+  }
 });
+
+// ─── Flock-splitting detection ─────────────────────────────────
+// Cluster boids into sub-flocks by proximity, draw faint lines between centroids
+const FLOCK_CLUSTER_RADIUS = 120;
+const FLINK_MAX_DIST = 300; // max distance between centroids to draw a link
+
+function detectSubFlocks() {
+  // Simple single-pass clustering: assign each boid to first cluster within radius
+  const clusters = [];
+  const assigned = new Array(boids.length).fill(-1);
+
+  for (let i = 0; i < boids.length; i++) {
+    if (assigned[i] !== -1) continue;
+    const cluster = { cx: 0, cy: 0, count: 0, members: [] };
+    // BFS-like expansion
+    const queue = [i];
+    assigned[i] = clusters.length;
+    while (queue.length > 0) {
+      const idx = queue.shift();
+      cluster.members.push(idx);
+      cluster.cx += boids[idx].pos.x;
+      cluster.cy += boids[idx].pos.y;
+      cluster.count++;
+      for (let j = i + 1; j < boids.length; j++) {
+        if (assigned[j] !== -1) continue;
+        if (vdist(boids[idx].pos, boids[j].pos) < FLOCK_CLUSTER_RADIUS) {
+          assigned[j] = clusters.length;
+          queue.push(j);
+        }
+      }
+    }
+    if (cluster.count > 2) { // only count meaningful sub-flocks
+      cluster.cx /= cluster.count;
+      cluster.cy /= cluster.count;
+      clusters.push(cluster);
+    }
+  }
+  return clusters;
+}
+
+function drawFlockLinks(ctx) {
+  const clusters = detectSubFlocks();
+  cachedClusters = clusters; // cache for stats panel
+  if (clusters.length < 2) return;
+
+  // Draw faint lines between nearby cluster centroids
+  for (let i = 0; i < clusters.length; i++) {
+    for (let j = i + 1; j < clusters.length; j++) {
+      const a = clusters[i], b = clusters[j];
+      const dx = a.cx - b.cx, dy = a.cy - b.cy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < FLINK_MAX_DIST && d > FLOCK_CLUSTER_RADIUS) {
+        // Opacity fades with distance
+        const alpha = 0.06 * (1 - (d - FLOCK_CLUSTER_RADIUS) / (FLINK_MAX_DIST - FLOCK_CLUSTER_RADIUS));
+        ctx.beginPath();
+        ctx.moveTo(a.cx, a.cy);
+        ctx.lineTo(b.cx, b.cy);
+        ctx.strokeStyle = `rgba(120, 180, 255, ${alpha})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw tiny centroid dots for each sub-flock
+  for (const c of clusters) {
+    ctx.beginPath();
+    ctx.arc(c.cx, c.cy, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(120, 180, 255, 0.15)';
+    ctx.fill();
+  }
+}
+
+// ─── Stats computation ──────────────────────────────────────────
+// Cached clusters so detectSubFlocks only runs once per frame
+let cachedClusters = [];
+
+function computeStats() {
+  if (boids.length === 0) return null;
+
+  // Avg flock velocity (speed magnitude)
+  let totalSpeed = 0;
+  let avgVx = 0, avgVy = 0;
+  // Heading bins for entropy (8 directional sectors)
+  const BINS = 8;
+  const bins = new Array(BINS).fill(0);
+  const N = boids.length;
+
+  for (const b of boids) {
+    const speed = vmag(b.vel);
+    totalSpeed += speed;
+    avgVx += b.vel.x;
+    avgVy += b.vel.y;
+
+    // Bin heading into 8 sectors
+    if (speed > 0.1) { // only bin boids that are actually moving
+      const angle = Math.atan2(b.vel.y, b.vel.x); // -π to π
+      const bin = Math.floor(((angle + Math.PI) / (2 * Math.PI)) * BINS) % BINS;
+      bins[bin]++;
+    }
+  }
+
+  const avgSpeed = totalSpeed / N;
+  // Flock alignment = magnitude of mean velocity vector (0 = random, 1 = fully aligned)
+  const meanVx = avgVx / N, meanVy = avgVy / N;
+  const alignment = vmag(vec(meanVx, meanVy)) / (avgSpeed > 0 ? avgSpeed : 1);
+
+  // Shannon entropy of heading distribution
+  let entropy = 0;
+  let total = 0;
+  for (const c of bins) total += c;
+  if (total > 0) {
+    for (const c of bins) {
+      if (c > 0) {
+        const p = c / total;
+        entropy -= p * Math.log2(p);
+      }
+    }
+  }
+  // Normalized entropy: 0 = all in one bin, 1 = uniform
+  const maxEntropy = Math.log2(BINS);
+  const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 0;
+
+  // Use cached clusters (computed once per frame in drawFlockLinks)
+  const clusters = cachedClusters;
+
+  return {
+    avgSpeed: avgSpeed.toFixed(2),
+    alignment: alignment.toFixed(3),
+    subFlocks: clusters.length,
+    largestFlock: clusters.length > 0 ? Math.max(...clusters.map(c => c.count)) : N,
+    entropy: entropy.toFixed(3),
+    normalizedEntropy: normalizedEntropy.toFixed(3),
+    totalBoids: N,
+  };
+}
+
+// ─── Day/Night Cycle ────────────────────────────────────────────
+let dayNightPhase = 0; // 0-2π, 0=noon, π=midnight
+function getDaylight() {
+  // Returns 0 (midnight) to 1 (noon)
+  return (Math.cos(dayNightPhase) + 1) / 2;
+}
+function updateDayNight() {
+  if (!CONFIG.dayNightCycle) return;
+  dayNightPhase += CONFIG.dayNightSpeed;
+  if (dayNightPhase > Math.PI * 2) dayNightPhase -= Math.PI * 2;
+  const d = getDaylight();
+  // Background: dark navy at night, deep blue-teal at day
+  const r = Math.round(10 + d * 4);
+  const g = Math.round(10 + d * 12);
+  const b = Math.round(26 + d * 10);
+  document.getElementById('canvas').style.background = `rgb(${r},${g},${b})`;
+}
 
 // ─── FPS counter ──────────────────────────────────────────────
 let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
+let statsFrame = 0; // throttle stats updates (every 6 frames)
 
 // ─── Main loop ────────────────────────────────────────────────
 function loop() {
   requestAnimationFrame(loop);
 
   if (!CONFIG.paused) {
+    updateDayNight();
+    updateWind();
+    // Day/night modulates flocking: tighter at night, faster by day
+    const d = getDaylight();
+    const origSep = CONFIG.separationWeight;
+    const origCoh = CONFIG.cohesionWeight;
+    const origMaxSpeed = CONFIG.maxSpeed;
+    if (CONFIG.dayNightCycle) {
+      CONFIG.separationWeight = origSep * (0.6 + d * 0.4); // tighter at night
+      CONFIG.cohesionWeight = origCoh * (1.2 - d * 0.4);   // closer at night
+      CONFIG.maxSpeed = origMaxSpeed * (0.7 + d * 0.3);     // slower at night
+    }
     for (const b of boids) b.flock(boids, predators, foods, currents, obstacles);
     for (const b of boids) b.update();
+    // Restore original values
+    CONFIG.separationWeight = origSep;
+    CONFIG.cohesionWeight = origCoh;
+    CONFIG.maxSpeed = origMaxSpeed;
     predators = predators.filter(p => p.update());
     foods = foods.filter(f => f.update());
   }
 
   // Render
-  ctx.fillStyle = 'rgba(10, 10, 26, 0.85)'; // Fade trail
+  const d = getDaylight();
+  const fadeAlpha = 0.85 - d * 0.05; // slightly more trail at night
+  const bgR = Math.round(10 + d * 4);
+  const bgG = Math.round(10 + d * 12);
+  const bgB = Math.round(26 + d * 10);
+  ctx.fillStyle = `rgba(${bgR}, ${bgG}, ${bgB}, ${fadeAlpha})`;
   ctx.fillRect(0, 0, W, H);
 
   for (const c of currents) c.draw(ctx);
+  drawWindParticles(ctx);
   for (const o of obstacles) o.draw(ctx);
   for (const f of foods) f.draw(ctx);
   for (const p of predators) p.draw(ctx);
   for (const b of boids) b.draw(ctx);
+
+  // Flock-splitting visual — faint links between sub-flocks
+  drawFlockLinks(ctx);
+
+  // Murmuration mode visual indicator — subtle wave overlay
+  if (CONFIG.murmuration) {
+    const t = performance.now() * 0.001;
+    // Draw faint sinusoidal waves across the screen
+    for (let w = 0; w < 3; w++) {
+      ctx.beginPath();
+      const yBase = H * (0.25 + w * 0.25);
+      const amplitude = 20 + w * 10;
+      const freq = 0.008 + w * 0.002;
+      const phaseOffset = w * 1.2;
+      for (let x = 0; x < W; x += 3) {
+        const y = yBase + Math.sin(x * freq + t * 2 + phaseOffset) * amplitude;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(100, 200, 255, ${0.03 + w * 0.01})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+  }
 
   // FPS
   frameCount++;
@@ -479,7 +842,22 @@ function loop() {
   }
   document.getElementById('fps').textContent = `${fps} fps`;
   document.getElementById('count').textContent = `${boids.length} boids`;
-  document.getElementById('mode').textContent = CONFIG.paused ? 'paused' : 'observing';
+  document.getElementById('mode').textContent = CONFIG.paused ? 'paused' : (CONFIG.murmuration ? 'murmuration' : 'observing');
+
+  // Stats panel (update every ~6 frames to avoid thrash)
+  statsFrame++;
+  if (statsFrame % 6 === 0) {
+    const stats = computeStats();
+    if (stats) {
+      document.getElementById('stats').innerHTML =
+        `<span style="color:#4488cc66">avg velocity</span> <b>${stats.avgSpeed}</b><br>` +
+        `<span style="color:#4488cc66">sub-flocks</span>  <b>${stats.subFlocks}</b><br>` +
+        `<span style="color:#4488cc66">largest</span>      <b>${stats.largestFlock}</b><br>` +
+        `<span style="color:#4488cc66">alignment</span>    <b>${stats.alignment}</b><br>` +
+        `<span style="color:#4488cc66">entropy H</span>    <b>${stats.entropy}</b><br>` +
+        `<span style="color:#4488cc66">norm entropy</span>  <b>${stats.normalizedEntropy}</b>`;
+    }
+  }
 }
 
 loop();
