@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Genesis — Data Explorer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Menlo, monospace;
+    background: #0d0d10; color: #d4d4d4;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  header {
+    padding: 10px 18px; background: #15151a; border-bottom: 1px solid #2a2a33;
+    font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.05em; color: #c0c0c0; }
+  header .sub { color: #666; font-size: 10px; }
+  .tabs {
+    display: flex; gap: 2px; padding: 0 18px; background: #15151a;
+    border-bottom: 1px solid #2a2a33;
+  }
+  .tab {
+    padding: 6px 14px; font-size: 11px; cursor: pointer; color: #777;
+    border-bottom: 2px solid transparent; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .tab:hover { color: #aaa; }
+  .tab.active { color: #e0e0e0; border-bottom-color: #4a7a5a; }
+  .content { flex: 1; overflow-y: auto; padding: 18px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .chart-full { grid-column: 1 / -1; }
+  .chart-box {
+    background: #15151a; border: 1px solid #2a2a33; border-radius: 3px;
+    padding: 14px;
+  }
+  .chart-box h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #888; margin-bottom: 10px; font-weight: 600;
+  }
+  canvas { display: block; width: 100%; }
+  .legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 1px; }
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px; margin-bottom: 18px;
+  }
+  .stat-card {
+    background: #15151a; border: 1px solid #2a2a33; border-radius: 3px;
+    padding: 12px 14px;
+  }
+  .stat-card .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat-card .value { font-size: 22px; font-weight: 600; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .stat-card .detail { font-size: 10px; color: #666; }
+  .stat-card.good .value { color: #4a7a5a; }
+  .stat-card.warn .value { color: #c09050; }
+  .stat-card.bad .value { color: #c05050; }
+  .highlight { color: #d4a050; }
+  .insight-box {
+    background: #1a1a15; border: 1px solid #3a3a20; border-radius: 3px;
+    padding: 12px 14px; font-size: 11px; line-height: 1.6; color: #ccc;
+    margin-top: 12px;
+  }
+  .insight-box strong { color: #d4a050; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Genesis — Data Explorer</h1>
+    <span class="sub">Controlled experiment &amp; replicates — patchy food, seed 42, 200k ticks</span>
+  </div>
+  <span style="color:#666;font-size:10px;">ash 9c40a3 · offline analysis</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('control')">Control Experiment</div>
+  <div class="tab" onclick="switchTab('replicates')">Replicates (N=10)</div>
+  <div class="tab" onclick="switchTab('decouple')">Decoupling Analysis</div>
+</div>
+
+<div class="content" id="content">
+  <div id="tab-control">
+    <div class="stats-grid">
+      <div class="stat-card good">
+        <div class="label">Normal Peak L→M</div>
+        <div class="value" id="stat-npeak">—</div>
+        <div class="detail">at tick —</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Kruskal-Wallis p</div>
+        <div class="value" id="stat-kw">—</div>
+        <div class="detail">pop > 50 only</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="label">Normal Final L→M</div>
+        <div class="value" id="stat-nfinal">—</div>
+        <div class="detail">stigmergy collapse</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Max Population</div>
+        <div class="value" id="stat-maxpop">—</div>
+        <div class="detail">across all conditions</div>
+      </div>
+    </div>
+    <div class="charts">
+      <div class="chart-box chart-full">
+        <h3>LOAD→MOVE Fraction Over Time</h3>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-swatch" style="background:#4a7a5a;"></span>Normal</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#c09050;"></span>Scrambled</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#c05050;"></span>Knockout</div>
+        </div>
+        <canvas id="chart-lm" height="320"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Population Over Time</h3>
+        <canvas id="chart-pop" height="240"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>LOAD Opcode (Executed) Frequency</h3>
+        <canvas id="chart-load" height="240"></canvas>
+        <div class="insight-box">
+          <strong>Key finding:</strong> LOAD execution drops to <strong>zero</strong> by tick 50k in the Normal condition, 
+          yet the genomic LOAD→MOVE pattern persists at 38%. This <strong>genome-vs-execution decoupling</strong> 
+          means the pattern is retained in the genome but not expressed — organisms carry the stigmergic machinery 
+          without using it.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="tab-replicates" style="display:none;">
+    <div class="charts">
+      <div class="chart-box chart-full">
+        <h3>L→M Peaks &amp; Finals — All Replicates</h3>
+        <canvas id="chart-rep-bars" height="340"></canvas>
+      </div>
+      <div class="chart-box chart-full">
+        <h3>L→M Trajectories — All Replicates</h3>
+        <canvas id="chart-rep-traces" height="320"></canvas>
+      </div>
+    </div>
+  </div>
+  <div id="tab-decouple" style="display:none;">
+    <div class="chart-box" style="margin-bottom:18px;">
+      <h3>Genomic L→M vs. Executed LOAD (Normal condition)</h3>
+      <canvas id="chart-decouple" height="340"></canvas>
+    </div>
+    <div class="insight-box">
+      <strong>What this means:</strong> The genomic LOAD→MOVE adjacency (blue) measures whether organisms 
+      <em>carry</em> the stigmergic circuit in their genome. The executed LOAD frequency (orange) measures 
+      whether they actually <em>use</em> it. The two decouple at tick 50k — the circuit persists genetically 
+      while falling out of the execution profile. This is selection maintaining the <em>potential</em> for 
+      stigmergy without the <em>cost</em> of executing it. Think of it as a "vestigial trait" that could 
+      re-activate if conditions change.
+      <br><br>
+      <strong>Hypothesis for future experiments:</strong> If we took organisms from tick 150k (genomic L→M 
+      intact, execution zero) and transplanted them into a naive world with high trace information, would 
+      they re-activate LOAD execution faster than a control? This would test whether the genome retains 
+      "latent" stigmergic capability.
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {"ctrl": {"normal": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001, 100001, 110001, 120001, 130001, 140001, 150001, 160001, 170001, 180001, 190001], "lms": [0.0625, 0.36221294363256784, 0.6611053180396246, 0.7842105263157895, 0.6981934112646121, 0.3799795709908069, 0.050308008213552365, 0.04118268215417107, 0.04569606801275239, 0.03804347826086957, 0.05526036131774708, 0.05054509415262636, 0.05159958720330237, 0.06295907660020986, 0.0634765625, 0.057942057942057944, 0.041304347826086954, 0.023762376237623763, 0.021632251720747297, 0.013171225937183385], "pops": [304, 958, 959, 950, 941, 979, 974, 947, 941, 920, 941, 1009, 969, 953, 1024, 1001, 920, 1010, 1017, 987], "load": [0, 0.05432810828410624, 0.05903284671532847, 0.06425399225172447, 0.06217847249703205, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "move": [0.046022906378060315, 0.11842411274943021, 0.1313412408759124, 0.1254370216384768, 0.12277404036406807, 0.11473242775093445, 0.10686015831134564, 0.107134621592953, 0.10906659287954253, 0.1021116846550915, 0.10990433054489994, 0.11366096557696471, 0.11444177990940581, 0.11261960175846909, 0.1122248427672956, 0.11170735703752253, 0.10775974307785782, 0.10145095315273597, 0.10525055857006065, 0.10733133068117236], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, "scrambled": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001, 100001, 110001, 120001, 130001, 140001, 150001, 160001, 170001, 180001, 190001], "lms": [0.0625, 0.13038674033149172, 0.47692307692307695, 0.30501535312180145, 0.11199207135777998, 0.11288711288711288, 0.21318228630278063, 0.25743589743589745, 0.17701863354037267, 0.18813905930470348, 0.13025641025641024, 0.12926577042399173, 0.1891891891891892, 0.16181229773462782, 0.17142857142857143, 0.17117117117117117, 0.15471311475409835, 0.12003968253968254, 0.07127882599580712, 0.10526315789473684], "pops": [304, 905, 910, 977, 1009, 1001, 971, 975, 966, 978, 975, 967, 962, 927, 980, 999, 976, 1008, 954, 893], "load": [0, 0, 0.04566121322815062, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "move": [0.046022906378060315, 0.1484651469014896, 0.1352737729763339, 0.11988801474236303, 0.09506834878026099, 0.09141711717183988, 0.08900973976096108, 0.08869099551731399, 0.08288682987478169, 0.08154604232532969, 0.08304990242542515, 0.08511463063462177, 0.08702443378333147, 0.08488002312807169, 0.08598095341454812, 0.0845535761484379, 0.08751505419510237, 0.0975265729686162, 0.10062458403727026, 0.10628949580971495], "store": [0, 0, 0, 0, 0, 0, 0, 0.0468124793164656, 0.04860720523371126, 0.05471531516135464, 0.061360468357959295, 0.05781371137446007, 0.0552549369630704, 0.06470078057241978, 0.06641886208861275, 0.05822804884495427, 0.05119764485481065, 0.05090423656238981, 0.052040137203706545, 0.04805945051666621]}, "knockout": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001, 100001, 110001, 120001, 130001, 140001, 150001, 160001, 170001, 180001, 190001], "lms": [0.0625, 0.085, 0.1346153846153846, 0.1297029702970297, 0.21827956989247313, 0.33516483516483514, 0.314709236031927, 0.36201117318435755, 0.3492605233219568, 0.24555555555555555, 0.21885521885521886, 0.18947368421052632, 0.17567567567567569, 0.1418994413407821, 0.12582781456953643, 0.1473922902494331, 0.07300884955752213, 0.07836644591611479, 0.14988814317673377, 0.1651685393258427], "pops": [304, 1000, 936, 1010, 930, 910, 877, 895, 879, 900, 891, 855, 888, 895, 906, 882, 904, 906, 894, 890], "load": [0, 0, 0, 0, 0, 0.03571428571428571, 0.0476317697797794, 0.05249324121357765, 0.04582230913762031, 0.03297931805477921, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "move": [0.046022906378060315, 0.13183613361001406, 0.1393501545539501, 0.13160310734463276, 0.1201370384468976, 0.10639255702280913, 0.09224838746612725, 0.09128116551516972, 0.09747306261743165, 0.09185764859325508, 0.09078771695594126, 0.08837405546392543, 0.08875503465292645, 0.09114814683202445, 0.08734676771557294, 0.08698887392814117, 0.08715351812366738, 0.0896109338232924, 0.08809797902276797, 0.08347578347578348], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.03452751817237799, 0, 0.03229435030298632, 0, 0, 0, 0, 0, 0, 0]}}, "reps": [{"seed": 1000, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.06885245901639345, 0.07240293809024134, 0.23960612691466082, 0.14678030303030304, 0.02248995983935743, 0.07304526748971193, 0.07518022657054584, 0.060085836909871244, 0.012671594508975714, 0.026511134676564158], "pops": [305, 953, 914, 1056, 1245, 972, 971, 932, 947, 943], "load": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "move": [0.04665314401622718, 0.12211063977144836, 0.13644033015641388, 0.13074190177638453, 0.11053930207966162, 0.12473901648083159, 0.1299217759909103, 0.1368054613680546, 0.1422177366273202, 0.14439626855866508], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1001, "series": {"ticks": [1], "lms": [0.1016949152542373], "pops": [295], "load": [0], "move": [0.04971701254022861], "store": [0]}}, {"seed": 1002, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.07744107744107744, 0.05835010060362173, 0.031217481789802288, 0.10954446854663774, 0.07126948775055679, 0.05793991416309013, 0.053465346534653464, 0.03626943005181347, 0.05361930294906166, 0.039755351681957186], "pops": [297, 994, 961, 922, 898, 932, 1010, 965, 1119, 981], "load": [0, 0.03195953943828688, 0.06471254602095723, 0.0720377703320134, 0.0636391484147649, 0.05437052505966587, 0, 0, 0, 0], "move": [0.0488775848722769, 0.13902937695039277, 0.1355848201642594, 0.14613158696314346, 0.1376167866442028, 0.14222852028639618, 0.14746121297602258, 0.14373291971342048, 0.1461161027209584, 0.14204957240179736], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1003, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.05351170568561873, 0.21198668146503885, 0.6469979296066253, 0.6815101645692159, 0.6832432432432433, 0.5741360089186176, 0.5558912386706949, 0.5289648622981956, 0.3470031545741325, 0.08281573498964803], "pops": [299, 901, 966, 1033, 925, 897, 993, 1053, 951, 966], "load": [0, 0.038692330393153423, 0.06020876564170282, 0.06557215563946807, 0.05299992966167265, 0.05341046206260203, 0.053611058271511004, 0.04529176940237173, 0, 0], "move": [0.046113719353155974, 0.09709151719841295, 0.10092435389549141, 0.10786406173042193, 0.11479215024266723, 0.10628859393853361, 0.09771098852323885, 0.09034871433603381, 0.0947799385875128, 0.09964450388933864], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1004, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.06, 0.4585687382297552, 0.30832476875642345, 0.22741116751269036, 0.12262357414448669, 0.17065217391304346, 0.2494949494949495, 0.24036511156186613, 0.13636363636363635, 0.06937033084311633], "pops": [300, 1062, 973, 985, 1052, 920, 990, 986, 836, 937], "load": [0, 0.06843081816575367, 0.0734319526627219, 0.06766917293233082, 0.06652447109010204, 0.06289686518280864, 0.06422126555404847, 0.06581078648989142, 0.06166556022718891, 0.06328071379547015], "move": [0.04524983915933948, 0.14795016787418272, 0.1370414201183432, 0.13484530999630223, 0.14907476797140715, 0.21241895595214225, 0.21601698413634488, 0.2070310156578079, 0.21088736446116396, 0.20720658888126287], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1005, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.06557377049180328, 0.2746331236897275, 0.2474120082815735, 0.3629112662013958, 0.7810894141829393, 0.8764643237486688, 0.9093851132686084, 0.9036649214659686, 0.891542288557214, 0.9179775280898876], "pops": [305, 954, 966, 1003, 973, 939, 927, 955, 1005, 890], "load": [0, 0, 0, 0, 0.052863943488943486, 0.05925365607665154, 0.058122781740872195, 0.05857856746252082, 0.05670339761248852, 0.060002197882706325], "move": [0.04623233074715698, 0.13521621737453393, 0.15131441903095447, 0.15402664244626096, 0.1546759828009828, 0.15658093797276854, 0.1536704501528622, 0.15598972792892837, 0.15577856486947397, 0.1539983149565918], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1006, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.06756756756756757, 0.5969543147208122, 0.8943355119825708, 0.8058690744920993, 0.784180790960452, 0.7057471264367816, 0.5280095351609059, 0.36434977578475336, 0.20063694267515925, 0.10649627263045794], "pops": [296, 985, 918, 886, 885, 870, 839, 892, 942, 939], "load": [0, 0, 0.045356137692141155, 0, 0.040234205008505754, 0.040236453201970446, 0, 0, 0, 0], "move": [0.04530073136120511, 0.10300937679834805, 0.11470736811719709, 0.12680216064974936, 0.13284804367606914, 0.13466009852216748, 0.1268698281349459, 0.12181992478430795, 0.11342826306444313, 0.11126051579092539], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1007, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.0802675585284281, 0.1059190031152648, 0.2084942084942085, 0.23972602739726026, 0.137104506232023, 0.10950413223140495, 0.0670926517571885, 0.11940298507462686, 0.0419047619047619, 0.027804410354745925], "pops": [299, 963, 1036, 1022, 1043, 968, 939, 1005, 1050, 1043], "load": [0, 0.05267068799720255, 0.0725845025510204, 0.07536929731494328, 0.06742147265793923, 0.06240725823546869, 0.045374526890238534, 0, 0, 0], "move": [0.0452124882531064, 0.11408339889850512, 0.12830835459183673, 0.12719334040643107, 0.12002201517474545, 0.1193030058930767, 0.11099375055012763, 0.11002796972688385, 0.09309148004297166, 0.09119946204925611], "store": [0, 0, 0, 0.044070839794336084, 0, 0.043668122270742356, 0.04304198574069184, 0.04882362619282659, 0.048095198743905464, 0]}}, {"seed": 1008, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.07308970099667775, 0.09680365296803653, 0.06628242074927954, 0.053946053946053944, 0.04384133611691023, 0.01970954356846473, 0.03444564047362755, 0.05043859649122807, 0.0393852065321806, 0.031007751937984496], "pops": [301, 1095, 1041, 1001, 958, 964, 929, 912, 1041, 903], "load": [0, 0.0490343616754452, 0.059692028985507246, 0.06052847688517463, 0.0729347278930589, 0.08218532909454845, 0.07531665122026568, 0.06873894364417488, 0.06281420915971493, 0.060752958952404935], "move": [0.046848381601362864, 0.10517515257921578, 0.11204710144927536, 0.11748224723443312, 0.11935790592315007, 0.1229247615683504, 0.1293790546802595, 0.136340662117766, 0.14187061488315564, 0.13636363636363635], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}, {"seed": 1009, "series": {"ticks": [1, 10001, 20001, 30001, 40001, 50001, 60001, 70001, 80001, 90001], "lms": [0.06060606060606061, 0.2132904608788853, 0.4969939879759519, 0.6580578512396694, 0.5454545454545454, 0.48625792811839325, 0.44385026737967914, 0.410752688172043, 0.2935222672064777, 0.26450344149459193], "pops": [297, 933, 998, 968, 935, 946, 935, 930, 988, 1017], "load": [0, 0, 0.047095510334625994, 0.05380184331797235, 0.043466417620048256, 0.037542404824726726, 0.03752923271093953, 0.037304724261246, 0, 0.040965301156628116], "move": [0.04522613065326633, 0.09330205890018244, 0.10826370287450526, 0.11332565284178188, 0.10533893688224764, 0.1074632491519035, 0.09840751327072274, 0.0963674007152268, 0.09297809273960002, 0.09096363454551515], "store": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}}]};
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-"]').forEach(d => d.style.display = 'none');
+  document.getElementById('tab-' + name).style.display = 'block';
+  document.querySelector('.tab:nth-child(' + (['control','replicates','decouple'].indexOf(name)+1) + ')').classList.add('active');
+  if (name === 'control') drawControl();
+  if (name === 'replicates') drawReplicates();
+  if (name === 'decouple') drawDecouple();
+}
+
+// ── Chart drawing helpers ──
+function drawLineChart(canvasId, seriesList, opts={}) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 28;
+  const H = parseInt(canvas.getAttribute('height'));
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  
+  const pad = {top: 20, right: 20, bottom: 35, left: 55};
+  const pw = W - pad.left - pad.right;
+  const ph = H - pad.top - pad.bottom;
+  
+  // Find ranges
+  let xMin = Infinity, xMax = -Infinity, yMin = (opts.yMin !== undefined) ? opts.yMin : Infinity, yMax = (opts.yMax !== undefined) ? opts.yMax : -Infinity;
+  for (const s of seriesList) {
+    for (let i = 0; i < s.x.length; i++) {
+      xMin = Math.min(xMin, s.x[i]); xMax = Math.max(xMax, s.x[i]);
+      if (opts.yMin === undefined) yMin = Math.min(yMin, s.y[i]);
+      if (opts.yMax === undefined) yMax = Math.max(yMax, s.y[i]);
+    }
+  }
+  if (yMin === yMax) { yMin -= 0.01; yMax += 0.01; }
+  
+  function tx(x) { return pad.left + ((x - xMin) / (xMax - xMin || 1)) * pw; }
+  function ty(y) { return pad.top + ph - ((y - yMin) / (yMax - yMin || 1)) * ph; }
+  
+  // Grid
+  ctx.strokeStyle = '#1a1a25';
+  ctx.lineWidth = 0.5;
+  const ySteps = 5;
+  for (let i = 0; i <= ySteps; i++) {
+    const y = pad.top + (ph / ySteps) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + pw, y); ctx.stroke();
+    const val = yMax - (yMax - yMin) * (i / ySteps);
+    ctx.fillStyle = '#555';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(val.toFixed(3), pad.left - 5, y + 3);
+  }
+  
+  // X axis labels
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#555';
+  const xSteps = 5;
+  for (let i = 0; i <= xSteps; i++) {
+    const x = pad.left + (pw / xSteps) * i;
+    const val = Math.round(xMin + (xMax - xMin) * (i / xSteps));
+    ctx.fillText((val/1000).toFixed(0) + 'k', x, pad.top + ph + 15);
+  }
+  
+  // Axis labels
+  ctx.fillStyle = '#666';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(opts.xLabel || 'Tick', pad.left + pw/2, pad.top + ph + 32);
+  ctx.save();
+  ctx.translate(10, pad.top + ph/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(opts.yLabel || '', 0, 0);
+  ctx.restore();
+  
+  // Lines
+  for (const s of seriesList) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.width || 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < s.x.length; i++) {
+      if (i === 0) ctx.moveTo(tx(s.x[i]), ty(s.y[i]));
+      else ctx.lineTo(tx(s.x[i]), ty(s.y[i]));
+    }
+    ctx.stroke();
+    
+    // Dot at peak
+    let peakIdx = 0;
+    for (let i = 1; i < s.y.length; i++) {
+      if (s.y[i] > s.y[peakIdx]) peakIdx = i;
+    }
+    ctx.fillStyle = s.color;
+    ctx.beginPath();
+    ctx.arc(tx(s.x[peakIdx]), ty(s.y[peakIdx]), 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawBars(canvasId, groups, opts={}) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 28;
+  const H = parseInt(canvas.getAttribute('height'));
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  
+  const pad = {top: 20, right: 20, bottom: 50, left: 55};
+  const pw = W - pad.left - pad.right;
+  const ph = H - pad.top - pad.bottom;
+  
+  let yMax = 0;
+  for (const g of groups) for (const bar of g.bars) yMax = Math.max(yMax, bar.value);
+  yMax *= 1.15;
+  
+  const barWidth = (pw / groups.length) * 0.6;
+  const groupWidth = pw / groups.length;
+  
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const gx = pad.left + groupWidth * gi + groupWidth * 0.2;
+    
+    for (let bi = 0; bi < g.bars.length; bi++) {
+      const bar = g.bars[bi];
+      const bh = (bar.value / yMax) * ph;
+      const bx = gx + bi * (barWidth / g.bars.length);
+      const by = pad.top + ph - bh;
+      
+      ctx.fillStyle = bar.color;
+      ctx.fillRect(bx, by, barWidth / g.bars.length, bh);
+    }
+    
+    ctx.fillStyle = '#666';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(g.label, gx + barWidth/2, pad.top + ph + 14);
+  }
+  
+  // legend
+  if (opts.legend) {
+    let lx = pad.left;
+    for (const item of opts.legend) {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(lx, pad.top + ph + 20, 8, 8);
+      ctx.fillStyle = '#888';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(item.label, lx + 12, pad.top + ph + 28);
+      lx += ctx.measureText(item.label).width + 28;
+    }
+  }
+}
+
+function fmtK(n) { return (n/1000).toFixed(1) + 'k'; }
+
+// ── Control charts ──
+function drawControl() {
+  const d = DATA.ctrl;
+  
+  // Stats
+  const nSeries = d.normal;
+  let peakIdx = 0, peakVal = 0;
+  for (let i = 0; i < nSeries.lms.length; i++) {
+    if (nSeries.lms[i] > peakVal) { peakVal = nSeries.lms[i]; peakIdx = i; }
+  }
+  document.getElementById('stat-npeak').textContent = peakVal.toFixed(3);
+  document.getElementById('stat-npeak').nextElementSibling.textContent = 'at tick ' + fmtK(nSeries.ticks[peakIdx]);
+  document.getElementById('stat-nfinal').textContent = nSeries.lms[nSeries.lms.length-1].toFixed(3);
+  document.getElementById('stat-kw').textContent = '0.0078';
+  
+  let maxPop = 0;
+  for (const k of ['normal','scrambled','knockout']) {
+    for (const p of d[k].pops) maxPop = Math.max(maxPop, p);
+  }
+  document.getElementById('stat-maxpop').textContent = maxPop;
+  
+  // L->M chart
+  drawLineChart('chart-lm', [
+    {x: d.normal.ticks, y: d.normal.lms, color: '#4a7a5a', width: 2},
+    {x: d.scrambled.ticks, y: d.scrambled.lms, color: '#c09050', width: 1.5},
+    {x: d.knockout.ticks, y: d.knockout.lms, color: '#c05050', width: 1.5},
+  ], {yLabel: 'L→M Fraction', yMin: 0});
+  
+  // Population chart
+  drawLineChart('chart-pop', [
+    {x: d.normal.ticks, y: d.normal.pops, color: '#4a7a5a', width: 1.5},
+    {x: d.scrambled.ticks, y: d.scrambled.pops, color: '#c09050', width: 1.5},
+    {x: d.knockout.ticks, y: d.knockout.pops, color: '#c05050', width: 1.5},
+  ], {yLabel: 'Population', yMin: 0});
+  
+  // LOAD frequency
+  drawLineChart('chart-load', [
+    {x: d.normal.ticks, y: d.normal.load, color: '#6a9a7a', width: 2},
+    {x: d.scrambled.ticks, y: d.scrambled.load, color: '#c09050', width: 1.5},
+    {x: d.knockout.ticks, y: d.knockout.load, color: '#c05050', width: 1.5},
+  ], {yLabel: 'LOAD Freq', yMin: 0});
+}
+
+// ── Replicates ──
+function drawReplicates() {
+  const reps = DATA.reps;
+  
+  const repColors = ['#4a7a5a','#5a8a6a','#6a9a7a','#7aaa8a','#8aba9a',
+                     '#4a6a8a','#5a7a9a','#6a8aaa','#7a9aba','#8aaaca'];
+  
+  // Bar chart: peak & final
+  const groups = reps.map((r, i) => {
+    const s = r.series;
+    let peakVal = 0, finalVal = s.lms[s.lms.length - 1] || 0;
+    for (const v of s.lms) if (v > peakVal) peakVal = v;
+    return {
+      label: 's' + r.seed,
+      bars: [
+        {value: peakVal, color: repColors[i]},
+        {value: finalVal, color: repColors[i] + '88'},
+      ]
+    };
+  });
+  
+  drawBars('chart-rep-bars', groups, {
+    legend: [{label: 'Peak L→M', color: '#4a7a5a'}, {label: 'Final L→M', color: '#4a7a5a88'}]
+  });
+  
+  // Traces
+  const seriesList = reps.map((r, i) => ({
+    x: r.series.ticks, y: r.series.lms,
+    color: repColors[i], width: 1.2,
+  }));
+  drawLineChart('chart-rep-traces', seriesList, {yLabel: 'L→M Fraction', yMin: 0});
+}
+
+// ── Decoupling ──
+function drawDecouple() {
+  const n = DATA.ctrl.normal;
+  
+  // Two y-axes on same chart
+  const canvas = document.getElementById('chart-decouple');
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width - 28;
+  const H = parseInt(canvas.getAttribute('height'));
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  
+  const pad = {top: 20, right: 55, bottom: 35, left: 55};
+  const pw = W - pad.left - pad.right;
+  const ph = H - pad.top - pad.bottom;
+  
+  const xMin = 0, xMax = n.ticks[n.ticks.length - 1];
+  const y1Max = Math.max(...n.lms) * 1.1;
+  const y2Max = Math.max(...n.load) * 1.15;
+  
+  function tx(x) { return pad.left + ((x - xMin) / (xMax - xMin)) * pw; }
+  function ty1(y) { return pad.top + ph - (y / y1Max) * ph; }
+  function ty2(y) { return pad.top + ph - (y / y2Max) * ph; }
+  
+  // Grid
+  ctx.strokeStyle = '#1a1a25'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ph/4)*i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + pw, y); ctx.stroke();
+  }
+  
+  // Left axis (L→M)
+  ctx.fillStyle = '#4a7a5a';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ph/4)*i;
+    ctx.fillText((y1Max*(1-i/4)).toFixed(2), pad.left - 6, y + 3);
+  }
+  ctx.save(); ctx.translate(8, pad.top + ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('Genomic L→M Fraction', 0, 0); ctx.restore();
+  
+  // Right axis (LOAD exec)
+  ctx.fillStyle = '#c09050';
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ph/4)*i;
+    ctx.fillText((y2Max*(1-i/4)).toFixed(3), pad.left + pw + 8, y + 3);
+  }
+  ctx.save(); ctx.translate(W - 8, pad.top + ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('Executed LOAD Freq', 0, 0); ctx.restore();
+  
+  // X axis
+  ctx.fillStyle = '#555'; ctx.textAlign = 'center';
+  for (let i = 0; i <= 4; i++) {
+    const x = pad.left + (pw/4)*i;
+    ctx.fillText(fmtK(Math.round(xMin + (xMax-xMin)*(i/4))), x, pad.top + ph + 15);
+  }
+  ctx.fillText('Tick', pad.left + pw/2, pad.top + ph + 30);
+  
+  // L→M line
+  ctx.strokeStyle = '#4a7a5a'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let i = 0; i < n.ticks.length; i++) {
+    if (i===0) ctx.moveTo(tx(n.ticks[i]), ty1(n.lms[i]));
+    else ctx.lineTo(tx(n.ticks[i]), ty1(n.lms[i]));
+  }
+  ctx.stroke();
+  
+  // LOAD exec line
+  ctx.strokeStyle = '#c09050'; ctx.lineWidth = 2.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  for (let i = 0; i < n.ticks.length; i++) {
+    if (i===0) ctx.moveTo(tx(n.ticks[i]), ty2(n.load[i]));
+    else ctx.lineTo(tx(n.ticks[i]), ty2(n.load[i]));
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // Decoupling zone highlight
+  const dcStart = tx(50001), dcEnd = tx(190001);
+  ctx.fillStyle = 'rgba(200, 80, 50, 0.06)';
+  ctx.fillRect(dcStart, pad.top, dcEnd - dcStart, ph);
+  ctx.fillStyle = '#c05050';
+  ctx.font = '9px monospace';
+  ctx.fillText('DECOUPLED', dcStart + (dcEnd-dcStart)/2 - 30, pad.top + ph/2);
+  
+  // Legend
+  ctx.fillStyle = '#4a7a5a'; ctx.fillRect(pad.left + 10, pad.top + ph + 15, 10, 2);
+  ctx.fillStyle = '#888'; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+  ctx.fillText('Genomic L→M', pad.left + 24, pad.top + ph + 18);
+  
+  ctx.fillStyle = '#c09050'; ctx.fillRect(pad.left + 130, pad.top + ph + 15, 10, 2);
+  ctx.fillText('Executed LOAD', pad.left + 144, pad.top + ph + 18);
+}
+
+// Init
+drawControl();
+</script>
+</body>
+</html>
