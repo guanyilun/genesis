@@ -605,6 +605,15 @@ window.addEventListener('keydown', (e) => {
     CONFIG.murmuration = !CONFIG.murmuration;
     document.getElementById('mode').textContent = CONFIG.murmuration ? 'murmuration' : 'observing';
   }
+  if (e.key === 'd' || e.key === 'D') {
+    CONFIG.dayNightCycle = !CONFIG.dayNightCycle;
+    if (!CONFIG.dayNightCycle) dayNightPhase = 0; // reset to noon
+    document.getElementById('mode').textContent = CONFIG.dayNightCycle ? 'day/night' : 'observing';
+  }
+  if (e.key === 'v' || e.key === 'V') {
+    CONFIG.predatorComm = !CONFIG.predatorComm;
+    document.getElementById('mode').textContent = CONFIG.predatorComm ? 'predator comms' : (CONFIG.murmuration ? 'murmuration' : 'observing');
+  }
 });
 
 // ─── Flock-splitting detection ─────────────────────────────────
