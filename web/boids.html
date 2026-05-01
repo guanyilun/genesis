@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emergent Boids</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a1a; overflow: hidden; font-family: 'SF Mono', 'Consolas', monospace; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 16px; left: 16px; color: #4488cc88; font-size: 12px;
+    pointer-events: none; z-index: 10; line-height: 1.6;
+  }
+  #controls {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    color: #4488cc66; font-size: 11px; text-align: center; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="hud">
+  <div id="fps">0 fps</div>
+  <div id="count">0 boids</div>
+  <div id="mode">observing</div>
+</div>
+<div id="controls">click to add predator · right-click to add food · shift+click to add obstacle · space to pause · +/- to add/remove boids</div>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// EMERGENT BOIDS — Core Engine
+// Three rules: separation, alignment, cohesion
+// Plus: predators, environment zones, visual effects
+// ═══════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── Configuration ────────────────────────────────────────────
+const CONFIG = {
+  numBoids: 150,
+  maxSpeed: 3.5,
+  maxForce: 0.12,
+  perceptionRadius: 80,
+  separationDist: 35,
+  separationWeight: 1.8,
+  alignmentWeight: 1.0,
+  cohesionWeight: 0.8,
+  predatorFleeRadius: 150,
+  predatorFleeWeight: 3.0,
+  foodAttractRadius: 120,
+  foodAttractWeight: 0.6,
+  obstacleAvoidRadius: 80,
+  obstacleAvoidWeight: 2.5,
+  currentForce: 0.03,
+  trailLength: 6,
+  trailAlpha: 0.3,
+  paused: false,
+};
+
+// ─── Vector helpers ───────────────────────────────────────────
+function vec(x, y) { return { x, y }; }
+function vadd(a, b) { return { x: a.x + b.x, y: a.y + b.y }; }
+function vsub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
+function vmul(v, s) { return { x: v.x * s, y: v.y * s }; }
+function vmag(v) { return Math.sqrt(v.x * v.x + v.y * v.y); }
+function vnorm(v) { const m = vmag(v); return m > 0 ? vmul(v, 1/m) : vec(0, 0); }
+function vlimit(v, max) { const m = vmag(v); return m > max ? vmul(v, max/m) : v; }
+function vdist(a, b) { return vmag(vsub(a, b)); }
+function vsetmag(v, mag) { const m = vmag(v); return m > 0 ? vmul(v, mag/m) : vec(0, 0); }
+
+// ─── Boid ─────────────────────────────────────────────────────
+class Boid {
+  constructor(x, y) {
+    this.pos = vec(x || Math.random() * W, y || Math.random() * H);
+    const angle = Math.random() * Math.PI * 2;
+    this.vel = vec(Math.cos(angle) * (1 + Math.random() * 2), Math.sin(angle) * (1 + Math.random() * 2));
+    this.acc = vec(0, 0);
+    this.trail = [];
+    this.hue = 200 + Math.random() * 40; // blue-cyan range
+  }
+
+  // Core flocking rules
+  flock(boids, predators, foods, currents, obstacles) {
+    let sep = vec(0, 0), ali = vec(0, 0), coh = vec(0, 0);
+    let sepCount = 0, aliCount = 0, cohCount = 0;
+
+    // Track proximity to predators/food for color shift
+    this.predatorProximity = 0;
+    this.foodProximity = 0;
+
+    for (const other of boids) {
+      if (other === this) continue;
+      const d = vdist(this.pos, other.pos);
+
+      // Separation
+      if (d < CONFIG.separationDist && d > 0) {
+        let diff = vnorm(vsub(this.pos, other.pos));
+        diff = vmul(diff, 1 / d); // weight by distance
+        sep = vadd(sep, diff);
+        sepCount++;
+      }
+
+      // Alignment + Cohesion (same perception radius)
+      if (d < CONFIG.perceptionRadius) {
+        ali = vadd(ali, other.vel);
+        aliCount++;
+        coh = vadd(coh, other.pos);
+        cohCount++;
+      }
+    }
+
+    // Average and steer
+    if (sepCount > 0) {
+      sep = vmul(sep, 1 / sepCount);
+      sep = vsetmag(sep, CONFIG.maxSpeed);
+      sep = vsub(sep, this.vel);
+      sep = vlimit(sep, CONFIG.maxForce);
+    }
+    if (aliCount > 0) {
+      ali = vmul(ali, 1 / aliCount);
+      ali = vsetmag(ali, CONFIG.maxSpeed);
+      ali = vsub(ali, this.vel);
+      ali = vlimit(ali, CONFIG.maxForce);
+    }
+    if (cohCount > 0) {
+      coh = vmul(coh, 1 / cohCount);
+      const desired = vnorm(vsub(coh, this.pos));
+      const steered = vmul(desired, CONFIG.maxSpeed);
+      coh = vsub(steered, this.vel);
+      coh = vlimit(coh, CONFIG.maxForce);
+    }
+
+    // Apply weights
+    this.acc = vadd(this.acc, vmul(sep, CONFIG.separationWeight));
+    this.acc = vadd(this.acc, vmul(ali, CONFIG.alignmentWeight));
+    this.acc = vadd(this.acc, vmul(coh, CONFIG.cohesionWeight));
+
+    // Predator avoidance
+    for (const pred of predators) {
+      const d = vdist(this.pos, pred.pos);
+      if (d < CONFIG.predatorFleeRadius && d > 0) {
+        let flee = vnorm(vsub(this.pos, pred.pos));
+        flee = vmul(flee, CONFIG.predatorFleeWeight * (1 - d / CONFIG.predatorFleeRadius));
+        this.acc = vadd(this.acc, flee);
+        this.predatorProximity = Math.max(this.predatorProximity, 1 - d / CONFIG.predatorFleeRadius);
+      }
+    }
+
+    // Food attraction
+    for (const food of foods) {
+      const d = vdist(this.pos, food.pos);
+      if (d < CONFIG.foodAttractRadius) {
+        let attract = vnorm(vsub(food.pos, this.pos));
+        attract = vmul(attract, CONFIG.foodAttractWeight * (1 - d / CONFIG.foodAttractRadius));
+        this.acc = vadd(this.acc, attract);
+        this.foodProximity = Math.max(this.foodProximity, 1 - d / CONFIG.foodAttractRadius);
+      }
+    }
+
+    // Current forces
+    for (const current of currents) {
+      const d = vdist(this.pos, current.pos);
+      if (d < current.radius) {
+        const strength = 1 - d / current.radius;
+        this.acc = vadd(this.acc, vmul(current.force, CONFIG.currentForce * strength));
+      }
+    }
+
+    // Obstacle avoidance
+    for (const obs of obstacles) {
+      const d = vdist(this.pos, obs.pos);
+      const avoidDist = obs.radius + CONFIG.obstacleAvoidRadius;
+      if (d < avoidDist && d > 0) {
+        let avoid = vnorm(vsub(this.pos, obs.pos));
+        // Stronger force closer to obstacle surface
+        const strength = 1 - (d - obs.radius) / CONFIG.obstacleAvoidRadius;
+        avoid = vmul(avoid, CONFIG.obstacleAvoidWeight * Math.max(0, strength));
+        this.acc = vadd(this.acc, avoid);
+      }
+    }
+  }
+
+  update() {
+    this.vel = vadd(this.vel, this.acc);
+    this.vel = vlimit(this.vel, CONFIG.maxSpeed);
+    this.pos = vadd(this.pos, this.vel);
+    this.acc = vec(0, 0);
+
+    // Wrap around edges
+    if (this.pos.x < 0) this.pos.x += W;
+    if (this.pos.x > W) this.pos.x -= W;
+    if (this.pos.y < 0) this.pos.y += H;
+    if (this.pos.y > H) this.pos.y -= H;
+
+    // Trail
+    this.trail.push({ x: this.pos.x, y: this.pos.y });
+    if (this.trail.length > CONFIG.trailLength) this.trail.shift();
+
+    // Color: base is blue-cyan (200+), shifts red near predators, green near food
+    const speed = vmag(this.vel);
+    if (this.predatorProximity > 0.1) {
+      // Near predator: shift toward red (hue 0-30)
+      this.hue = 200 * (1 - this.predatorProximity) + 10 * this.predatorProximity;
+    } else if (this.foodProximity > 0.1) {
+      // Near food: shift toward green (hue 120)
+      this.hue = 200 * (1 - this.foodProximity) + 120 * this.foodProximity;
+    } else {
+      this.hue = 200 + speed * 15; // default: faster = more cyan
+    }
+  }
+
+  draw(ctx) {
+    // Proximity glow — soft aura when near predator (red) or food (green)
+    if (this.predatorProximity > 0.1) {
+      const glowR = 12 + this.predatorProximity * 20;
+      const grad = ctx.createRadialGradient(this.pos.x, this.pos.y, 0, this.pos.x, this.pos.y, glowR);
+      grad.addColorStop(0, `rgba(255, 60, 60, ${this.predatorProximity * 0.3})`);
+      grad.addColorStop(1, 'rgba(255, 60, 60, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(this.pos.x - glowR, this.pos.y - glowR, glowR * 2, glowR * 2);
+    } else if (this.foodProximity > 0.1) {
+      const glowR = 10 + this.foodProximity * 16;
+      const grad = ctx.createRadialGradient(this.pos.x, this.pos.y, 0, this.pos.x, this.pos.y, glowR);
+      grad.addColorStop(0, `rgba(60, 255, 120, ${this.foodProximity * 0.25})`);
+      grad.addColorStop(1, 'rgba(60, 255, 120, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(this.pos.x - glowR, this.pos.y - glowR, glowR * 2, glowR * 2);
+    }
+
+    // Trail
+    if (this.trail.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(this.trail[0].x, this.trail[0].y);
+      for (let i = 1; i < this.trail.length; i++) {
+        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      }
+      ctx.strokeStyle = `hsla(${this.hue}, 80%, 60%, ${CONFIG.trailAlpha})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Boid body (triangle pointing in velocity direction)
+    const angle = Math.atan2(this.vel.y, this.vel.x);
+    const size = 5;
+    ctx.save();
+    ctx.translate(this.pos.x, this.pos.y);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.6, size * 0.5);
+    ctx.lineTo(-size * 0.6, -size * 0.5);
+    ctx.closePath();
+    ctx.fillStyle = `hsla(${this.hue}, 80%, 65%, 0.85)`;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─── Predator (follows mouse) ────────────────────────────────
+class Predator {
+  constructor(x, y) {
+    this.pos = vec(x, y);
+    this.lifetime = 300; // frames
+    this.age = 0;
+  }
+  draw(ctx) {
+    const alpha = Math.max(0, 1 - this.age / this.lifetime);
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 60, 60, ${alpha * 0.7})`;
+    ctx.fill();
+    // Flee zone indicator
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, CONFIG.predatorFleeRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 60, 60, ${alpha * 0.1})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  update() {
+    this.age++;
+    return this.age < this.lifetime;
+  }
+}
+
+// ─── Food patch ───────────────────────────────────────────────
+class Food {
+  constructor(x, y) {
+    this.pos = vec(x, y);
+    this.lifetime = 600;
+    this.age = 0;
+  }
+  draw(ctx) {
+    const alpha = Math.max(0, 1 - this.age / this.lifetime);
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(60, 255, 120, ${alpha * 0.6})`;
+    ctx.fill();
+    // Attract zone
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, CONFIG.foodAttractRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(60, 255, 120, ${alpha * 0.08})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  update() {
+    this.age++;
+    return this.age < this.lifetime;
+  }
+}
+
+// ─── Obstacle ──────────────────────────────────────────────
+class Obstacle {
+  constructor(x, y, radius) {
+    this.pos = vec(x, y);
+    this.radius = radius || 30;
+    this.phase = Math.random() * Math.PI * 2;
+  }
+  draw(ctx) {
+    // Pulsing avoidance ring
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.003 + this.phase);
+    const avoidR = this.radius + CONFIG.obstacleAvoidRadius * (0.5 + pulse * 0.5);
+
+    // Solid core
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(180, 100, 50, 0.35)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(220, 140, 60, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Avoidance ring — animated dashes
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, avoidR, 0, Math.PI * 2);
+    ctx.setLineDash([6, 10]);
+    ctx.lineDashOffset = -performance.now() * 0.04;
+    ctx.strokeStyle = `rgba(255, 160, 60, ${0.15 + pulse * 0.15})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Inner glow ring
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.radius + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 200, 100, ${0.08 + pulse * 0.08})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+// ─── Current zone ────────────────────────────────────────────
+class Current {
+  constructor(x, y, radius, forceX, forceY) {
+    this.pos = vec(x, y);
+    this.radius = radius;
+    this.force = vec(forceX, forceY);
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(100, 150, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Arrow showing direction
+    const len = vmag(this.force) * 200;
+    const dir = vnorm(this.force);
+    ctx.beginPath();
+    ctx.moveTo(this.pos.x, this.pos.y);
+    ctx.lineTo(this.pos.x + dir.x * len, this.pos.y + dir.y * len);
+    ctx.strokeStyle = 'rgba(100, 150, 255, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+// ─── State ────────────────────────────────────────────────────
+let boids = [];
+let predators = [];
+let foods = [];
+let currents = [];
+let obstacles = [];
+
+// Create default currents (circular flow)
+function createDefaultCurrents() {
+  currents = [];
+  const cx = W / 2, cy = H / 2;
+  const r = Math.min(W, H) * 0.3;
+  // Circular current — 4 segments
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2;
+    const x = cx + Math.cos(angle) * r * 0.5;
+    const y = cy + Math.sin(angle) * r * 0.5;
+    const fx = Math.cos(angle + Math.PI / 2) * 0.5;
+    const fy = Math.sin(angle + Math.PI / 2) * 0.5;
+    currents.push(new Current(x, y, r * 0.6, fx, fy));
+  }
+}
+
+function initBoids(n) {
+  boids = [];
+  for (let i = 0; i < n; i++) {
+    boids.push(new Boid());
+  }
+}
+
+initBoids(CONFIG.numBoids);
+createDefaultCurrents();
+
+// Create a few default obstacles
+obstacles.push(new Obstacle(W * 0.25, H * 0.35, 35));
+obstacles.push(new Obstacle(W * 0.65, H * 0.6, 45));
+obstacles.push(new Obstacle(W * 0.45, H * 0.75, 25));
+
+// ─── Input ────────────────────────────────────────────────────
+canvas.addEventListener('click', (e) => {
+  if (e.shiftKey) {
+    const r = 25 + Math.random() * 25;
+    obstacles.push(new Obstacle(e.clientX, e.clientY, r));
+  } else {
+    predators.push(new Predator(e.clientX, e.clientY));
+  }
+});
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  foods.push(new Food(e.clientX, e.clientY));
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { CONFIG.paused = !CONFIG.paused; e.preventDefault(); }
+  if (e.key === '+' || e.key === '=') {
+    for (let i = 0; i < 10; i++) boids.push(new Boid());
+  }
+  if (e.key === '-' || e.key === '_') {
+    boids.splice(0, Math.min(10, boids.length));
+  }
+});
+
+// ─── FPS counter ──────────────────────────────────────────────
+let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
+
+// ─── Main loop ────────────────────────────────────────────────
+function loop() {
+  requestAnimationFrame(loop);
+
+  if (!CONFIG.paused) {
+    for (const b of boids) b.flock(boids, predators, foods, currents, obstacles);
+    for (const b of boids) b.update();
+    predators = predators.filter(p => p.update());
+    foods = foods.filter(f => f.update());
+  }
+
+  // Render
+  ctx.fillStyle = 'rgba(10, 10, 26, 0.85)'; // Fade trail
+  ctx.fillRect(0, 0, W, H);
+
+  for (const c of currents) c.draw(ctx);
+  for (const o of obstacles) o.draw(ctx);
+  for (const f of foods) f.draw(ctx);
+  for (const p of predators) p.draw(ctx);
+  for (const b of boids) b.draw(ctx);
+
+  // FPS
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime > 1000) {
+    fps = Math.round(frameCount / ((now - lastFpsTime) / 1000));
+    frameCount = 0;
+    lastFpsTime = now;
+  }
+  document.getElementById('fps').textContent = `${fps} fps`;
+  document.getElementById('count').textContent = `${boids.length} boids`;
+  document.getElementById('mode').textContent = CONFIG.paused ? 'paused' : 'observing';
+}
+
+loop();
+</script>
+</body>
+</html>
