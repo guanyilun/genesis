@@ -1,0 +1,303 @@
+========================================================================
+  GENESIS — COMPREHENSIVE ANALYSIS REPORT
+========================================================================
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  CONDITION: early_window                                               │
+│  Replicates: 10                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+  POPULATION DYNAMICS:
+    peak_population                 mean= 4366.5000  std= 3140.6716  range=[295.0000, 9781.0000]
+    final_population                mean=  840.8000  std=  281.9269  range=[0.0000, 972.0000]
+    mean_population                 mean=  795.3000  std=  297.2175  range=[19.8000, 1039.3500]
+    growth_rate                     mean=   -0.0007  std=    0.0010  range=[-0.0017, 0.0014]
+    extinction_count                1/10 replicates went extinct
+
+  DECOUPLING (LOAD gene persists, execution drops):
+    Decoupling detected in 2/10 replicates
+    Decoupling onset ticks: [1501, 2501]
+
+  GENOMIC COMPLEXITY:
+    genome_len_initial              mean=     31.07  std=      0.53
+    genome_len_final                mean=     21.40  std=      9.12
+    Genome length trends: {'shrinking': 8, 'stable': 2}
+
+  BEHAVIORAL PROFILE SHIFT:
+    profile_shift                   mean=    0.0000  std=    0.0000
+    Dominant late behaviors: {'unknown': 10}
+
+  STIGMERGY / COMMUNICATION:
+    stigmergy_gene_final            mean=  0.000000  range=[0.000000, 0.000000]
+    stigmergy_gene_peak             mean=  0.000000  range=[0.000000, 0.000000]
+    store_gene_final                mean=  0.000000  range=[0.000000, 0.000000]
+    comm_gene_final                 mean=  0.000000  range=[0.000000, 0.000000]
+
+  ENVIRONMENT INTERACTION (trace info):
+    trace_util_final                mean=  0.000000  range=[0.000000, 0.000000]
+    trace_util_peak                 mean=  0.000000  range=[0.000000, 0.000000]
+    trace_mean_final                mean= 89.013153  range=[4.426453, 116.529114]
+    trace_mean_peak                 mean= 94.531274  range=[4.426453, 116.529114]
+    Trace utilization trends: {'stable': 10}
+
+  MUTUAL INFORMATION (genome↔behavior coupling):
+    mutual_info_final               mean=  0.000000  range=[0.000000, 0.000000]
+    mutual_info_peak                mean=  0.000000  range=[0.000000, 0.000000]
+    MI trends: {'stable': 10}
+
+  DIRECTIONAL LOAD DIVERSITY:
+    directional_load_final          mean=  0.000000  range=[0.000000, 0.000000]
+    directional_load_peak           mean=  0.000000  range=[0.000000, 0.000000]
+
+  PARASITES: detected in 0/10 replicates
+
+  ENERGY:
+    energy_peak                     mean=      0.00  std=      0.00
+    energy_final                    mean=      0.00  std=      0.00
+    Energy trends: {'sustained': 10}
+
+  PER-REPLICATE SUMMARY:
+      Seed   PeakPop   FinalPop   GenomeLen   Stigmergy   TraceUtil   Decoupled
+    ───────────────────────────────────────────────────────────────────────────
+      1000      4454        972        23.2      0.0000      0.0000       False
+      1001       295          0         0.0      0.0000      0.0000       False
+      1002      9781        932        14.4      0.0000      0.0000        True
+      1003      5616        897        31.4      0.0000      0.0000       False
+      1004      1466        920        16.3      0.0000      0.0000       False
+      1005      5039        939        29.6      0.0000      0.0000       False
+      1006      3839        870        29.2      0.0000      0.0000       False
+      1007      1071        968        24.4      0.0000      0.0000       False
+      1008      2482        964        17.6      0.0000      0.0000       False
+      1009      9622        946        28.0      0.0000      0.0000        True
+
+────────────────────────────────────────────────────────────────────────
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  CONDITION: patchy                                                     │
+│  Replicates: 10                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+  POPULATION DYNAMICS:
+    peak_population                 mean= 1005.6000  std=  245.1837  range=[295.0000, 1245.0000]
+    final_population                mean=  881.7000  std=  202.9670  range=[295.0000, 1045.0000]
+    mean_population                 mean=  875.2950  std=  195.4712  range=[295.0000, 985.6500]
+    growth_rate                     mean=    0.0000  std=    0.0000  range=[0.0000, 0.0000]
+    extinction_count                0/10 replicates went extinct
+
+  DECOUPLING (LOAD gene persists, execution drops):
+    Decoupling detected in 2/10 replicates
+    Decoupling onset ticks: [10001, 30001]
+
+  GENOMIC COMPLEXITY:
+    genome_len_initial              mean=     31.07  std=      0.53
+    genome_len_final                mean=     26.97  std=      8.51
+    Genome length trends: {'shrinking': 5, 'stable': 3, 'growing': 2}
+
+  BEHAVIORAL PROFILE SHIFT:
+    profile_shift                   mean=       nan  std=       nan
+    Dominant late behaviors: {'operand_diversity': 10}
+
+  STIGMERGY / COMMUNICATION:
+    stigmergy_gene_final            mean=  0.048647  range=[0.019074, 0.081382]
+    stigmergy_gene_peak             mean=  0.081735  range=[0.049828, 0.119440]
+    store_gene_final                mean=  0.025075  range=[0.007769, 0.052249]
+    comm_gene_final                 mean=  0.038132  range=[0.008901, 0.056215]
+
+  ENVIRONMENT INTERACTION (trace info):
+    trace_util_final                mean=  0.832593  range=[0.000549, 0.976929]
+    trace_util_peak                 mean=  0.871381  range=[0.000549, 0.989197]
+    trace_mean_final                mean= 95.184665  range=[1.000000, 122.137286]
+    trace_mean_peak                 mean=107.323238  range=[1.000000, 128.120747]
+    Trace utilization trends: {'increasing': 9, 'stable': 1}
+
+  MUTUAL INFORMATION (genome↔behavior coupling):
+    mutual_info_final               mean= -0.002178  range=[-0.008697, 0.002021]
+    mutual_info_peak                mean=  0.008133  range=[0.000000, 0.011941]
+    MI trends: {'increasing': 1, 'stable': 1, 'decreasing': 8}
+
+  DIRECTIONAL LOAD DIVERSITY:
+    directional_load_final          mean=  0.519644  range=[0.097608, 1.114072]
+    directional_load_peak           mean=  1.213784  range=[0.620339, 1.714876]
+
+  PARASITES: detected in 7/10 replicates
+
+  ENERGY:
+    energy_peak                     mean=    659.86  std=    150.34
+    energy_final                    mean=    569.74  std=    114.44
+    Energy trends: {'sustained': 10}
+
+  PER-REPLICATE SUMMARY:
+      Seed   PeakPop   FinalPop   GenomeLen   Stigmergy   TraceUtil   Decoupled
+    ───────────────────────────────────────────────────────────────────────────
+      1000      1245        981        23.8      0.0270      0.8871       False
+      1001       295        295        30.5      0.0498      0.0005       False
+      1002      1119       1045        14.3      0.0191      0.9470       False
+      1003      1093        909        30.8      0.0425      0.8858       False
+      1004      1062        878        15.5      0.0741      0.9760        True
+      1005      1005        901        43.2      0.0511      0.9308       False
+      1006      1015        924        30.7      0.0452      0.9174       False
+      1007      1078       1038        22.4      0.0594      0.9172       False
+      1008      1095        938        22.6      0.0814      0.9769       False
+      1009      1049        908        35.8      0.0369      0.8871        True
+
+────────────────────────────────────────────────────────────────────────
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  CONDITION: uniform                                                    │
+│  Replicates: 10                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+  POPULATION DYNAMICS:
+    peak_population                 mean= 3406.3000  std=  181.6282  range=[3137.0000, 3748.0000]
+    final_population                mean= 3024.5000  std=  135.8656  range=[2855.0000, 3309.0000]
+    mean_population                 mean= 2919.5950  std=  100.3243  range=[2768.3000, 3082.2500]
+    growth_rate                     mean=    0.0001  std=    0.0000  range=[0.0001, 0.0001]
+    extinction_count                0/10 replicates went extinct
+
+  DECOUPLING (LOAD gene persists, execution drops):
+    Decoupling detected in 0/10 replicates
+
+  GENOMIC COMPLEXITY:
+    genome_len_initial              mean=     31.07  std=      0.53
+    genome_len_final                mean=     30.34  std=      8.67
+    Genome length trends: {'growing': 3, 'shrinking': 5, 'stable': 2}
+
+  BEHAVIORAL PROFILE SHIFT:
+    profile_shift                   mean=    0.1279  std=    0.0385
+    Dominant late behaviors: {'operand_diversity': 10}
+
+  STIGMERGY / COMMUNICATION:
+    stigmergy_gene_final            mean=  0.036854  range=[0.008273, 0.068733]
+    stigmergy_gene_peak             mean=  0.076672  range=[0.052867, 0.108714]
+    store_gene_final                mean=  0.020606  range=[0.004956, 0.056706]
+    comm_gene_final                 mean=  0.039486  range=[0.014647, 0.068827]
+
+  ENVIRONMENT INTERACTION (trace info):
+    trace_util_final                mean=  0.901123  range=[0.757874, 0.971497]
+    trace_util_peak                 mean=  0.951617  range=[0.778931, 0.988464]
+    trace_mean_final                mean=115.912836  range=[91.110792, 141.873783]
+    trace_mean_peak                 mean=125.212515  range=[104.262624, 141.873783]
+    Trace utilization trends: {'increasing': 10}
+
+  MUTUAL INFORMATION (genome↔behavior coupling):
+    mutual_info_final               mean=  0.000208  range=[-0.002358, 0.001941]
+    mutual_info_peak                mean=  0.003540  range=[0.001902, 0.005051]
+    MI trends: {'increasing': 6, 'decreasing': 4}
+
+  DIRECTIONAL LOAD DIVERSITY:
+    directional_load_final          mean=  0.492495  range=[0.048336, 1.233660]
+    directional_load_peak           mean=  1.104195  range=[0.685619, 1.711499]
+
+  PARASITES: detected in 7/10 replicates
+
+  ENERGY:
+    energy_peak                     mean=    672.87  std=    141.83
+    energy_final                    mean=    447.37  std=     92.35
+    Energy trends: {'declining': 2, 'sustained': 8}
+
+  PER-REPLICATE SUMMARY:
+      Seed   PeakPop   FinalPop   GenomeLen   Stigmergy   TraceUtil   Decoupled
+    ───────────────────────────────────────────────────────────────────────────
+      1000      3621       3167        41.6      0.0618      0.9312       False
+      1001      3284       2898        47.1      0.0438      0.9367       False
+      1002      3245       2855        17.5      0.0083      0.9507       False
+      1003      3534       2938        31.9      0.0373      0.9715       False
+      1004      3230       2927        26.3      0.0226      0.9534       False
+      1005      3479       3086        21.6      0.0297      0.7825       False
+      1006      3748       3003        35.7      0.0380      0.9450       False
+      1007      3377       2938        23.1      0.0257      0.9316       False
+      1008      3408       3309        30.7      0.0687      0.8506       False
+      1009      3137       3124        27.9      0.0326      0.7579       False
+
+────────────────────────────────────────────────────────────────────────
+
+
+┌──────────────────────────────────────────────────────────────────────┐
+│  CROSS-CONDITION COMPARISON                                            │
+└──────────────────────────────────────────────────────────────────────┘
+
+  peak_population:
+    early_window          mean= 4366.500000  std= 3140.671624
+    patchy                mean= 1005.600000  std=  245.183686
+    uniform               mean= 3406.300000  std=  181.628219
+
+  final_population:
+    early_window          mean=  840.800000  std=  281.926870
+    patchy                mean=  881.700000  std=  202.967017
+    uniform               mean= 3024.500000  std=  135.865559
+
+  growth_rate:
+    early_window          mean=   -0.000741  std=    0.001003
+    patchy                mean=    0.000032  std=    0.000011
+    uniform               mean=    0.000070  std=    0.000001
+
+  genome_len_final:
+    early_window          mean=   21.398492  std=    9.116752
+    patchy                mean=   26.973099  std=    8.510200
+    uniform               mean=   30.343083  std=    8.672739
+
+  stigmergy_gene_final:
+    early_window          mean=    0.000000  std=    0.000000
+    patchy                mean=    0.048647  std=    0.018362
+    uniform               mean=    0.036854  std=    0.017045
+
+  trace_util_final:
+    early_window          mean=    0.000000  std=    0.000000
+    patchy                mean=    0.832593  std=    0.279206
+    uniform               mean=    0.901123  std=    0.072331
+
+  mutual_info_final:
+    early_window          mean=    0.000000  std=    0.000000
+    patchy                mean=   -0.002178  std=    0.003212
+    uniform               mean=    0.000208  std=    0.001559
+
+  profile_shift:
+    early_window          mean=    0.000000  std=    0.000000
+    patchy                mean=         nan  std=         nan
+    uniform               mean=    0.127874  std=    0.038475
+
+  energy_final:
+    early_window          mean=    0.000000  std=    0.000000
+    patchy                mean=  569.739300  std=  114.437385
+    uniform               mean=  447.368554  std=   92.353626
+
+  directional_load_final:
+    early_window          mean=    0.000000  std=    0.000000
+    patchy                mean=    0.519644  std=    0.352853
+    uniform               mean=    0.492495  std=    0.340053
+
+  CATEGORICAL COMPARISONS:
+    Decoupling:
+      early_window          2/10 replicates
+      patchy                2/10 replicates
+      uniform               0/10 replicates
+
+    Parasites detected:
+      early_window          0/10 replicates
+      patchy                7/10 replicates
+      uniform               7/10 replicates
+
+    Extinctions:
+      early_window          1/10 replicates
+      patchy                0/10 replicates
+      uniform               0/10 replicates
+
+    Genome trends:
+      early_window          {'shrinking': 8, 'stable': 2}
+      patchy                {'shrinking': 5, 'stable': 3, 'growing': 2}
+      uniform               {'growing': 3, 'shrinking': 5, 'stable': 2}
+
+    Trace trends:
+      early_window          {'stable': 10}
+      patchy                {'increasing': 9, 'stable': 1}
+      uniform               {'increasing': 10}
+
+    Dominant behaviors:
+      early_window          {'unknown': 10}
+      patchy                {'operand_diversity': 10}
+      uniform               {'operand_diversity': 10}
+
+    Energy trends:
+      early_window          {'sustained': 10}
+      patchy                {'sustained': 10}
+      uniform               {'declining': 2, 'sustained': 8}
