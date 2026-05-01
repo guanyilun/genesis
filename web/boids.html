@@ -40,7 +40,7 @@
 </div>
 <div id="stats"></div>
 <div id="wind-indicator"></div>
-<div id="controls">click: predator · right-click: food · shift+click: obstacle · space: pause · +/-: boids · w: wind · m: murmuration · v: predator comms · d: day/night</div>
+<div id="controls">click: predator · right-click: food · shift+click: obstacle · space: pause · +/-: boids · w: wind · m: murmuration · v: predator comms · t: phantom trail · d: day/night</div>
 <script>
 // ═══════════════════════════════════════════════════════════════
 // EMERGENT BOIDS — Core Engine
@@ -86,6 +86,7 @@ const CONFIG = {
   windGustInterval: 300, // frames between gusts
   windGustDuration: 120, // frames a gust lasts
   predatorComm: false,  // press V to toggle
+  phantomTrail: false,   // press T to toggle — bioluminescent afterglow near food
   dayNightCycle: true,   // press D to toggle
   dayNightSpeed: 0.0003, // cycle frequency (higher = faster)
   paused: false,
@@ -276,14 +277,41 @@ class Boid {
 
     // Trail
     if (this.trail.length > 1) {
-      ctx.beginPath();
-      ctx.moveTo(this.trail[0].x, this.trail[0].y);
-      for (let i = 1; i < this.trail.length; i++) {
-        ctx.lineTo(this.trail[i].x, this.trail[i].y);
+      if (CONFIG.phantomTrail && this.foodProximity > 0.1) {
+        // Phantom trail: bioluminescent amber/gold afterglow near food
+        // Longer, brighter, warm-colored trail that fades faster
+        const glowLen = Math.min(this.trail.length + 4, 12);
+        for (let i = 0; i < this.trail.length - 1; i++) {
+          const t = i / this.trail.length;
+          const alpha = t * 0.6 * this.foodProximity;
+          // Amber/gold gradient: hue 35 (amber) fading to 50 (gold)
+          const hue = 35 + t * 15;
+          ctx.beginPath();
+          ctx.moveTo(this.trail[i].x, this.trail[i].y);
+          ctx.lineTo(this.trail[i + 1].x, this.trail[i + 1].y);
+          ctx.strokeStyle = `hsla(${hue}, 90%, 65%, ${alpha})`;
+          ctx.lineWidth = 2.5 - t * 1.5;
+          ctx.stroke();
+        }
+        // Bright glow at the head
+        const glowR = 6 + this.foodProximity * 10;
+        const grad = ctx.createRadialGradient(this.pos.x, this.pos.y, 0, this.pos.x, this.pos.y, glowR);
+        grad.addColorStop(0, `rgba(255, 200, 60, ${this.foodProximity * 0.4})`);
+        grad.addColorStop(0.5, `rgba(255, 160, 30, ${this.foodProximity * 0.15})`);
+        grad.addColorStop(1, 'rgba(255, 140, 20, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(this.pos.x - glowR, this.pos.y - glowR, glowR * 2, glowR * 2);
+      } else {
+        // Normal trail
+        ctx.beginPath();
+        ctx.moveTo(this.trail[0].x, this.trail[0].y);
+        for (let i = 1; i < this.trail.length; i++) {
+          ctx.lineTo(this.trail[i].x, this.trail[i].y);
+        }
+        ctx.strokeStyle = `hsla(${this.hue}, 80%, 60%, ${CONFIG.trailAlpha})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      ctx.strokeStyle = `hsla(${this.hue}, 80%, 60%, ${CONFIG.trailAlpha})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
 
     // Boid body (triangle pointing in velocity direction)
@@ -613,6 +641,10 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'v' || e.key === 'V') {
     CONFIG.predatorComm = !CONFIG.predatorComm;
     document.getElementById('mode').textContent = CONFIG.predatorComm ? 'predator comms' : (CONFIG.murmuration ? 'murmuration' : 'observing');
+  }
+  if (e.key === 't' || e.key === 'T') {
+    CONFIG.phantomTrail = !CONFIG.phantomTrail;
+    document.getElementById('mode').textContent = CONFIG.phantomTrail ? 'phantom trail' : 'observing';
   }
 });
 
